@@ -2,8 +2,11 @@ export type Role = 'admin' | 'supervisor' | 'engineer';
 
 export interface DailyTarget {
   id: string;
-  dayNumber: number; // 1-42
-  date: string; // ISO date
+  weekNumber: number;
+  date: string;
+  contractor: string;
+  trade: string;
+  zone: string;
   description: string;
   targetQuantity: number;
   unit: string;
@@ -19,16 +22,10 @@ export interface DailyTarget {
   confirmedByAdmin?: boolean;
 }
 
-export interface WeeklyPlan {
-  weekNumber: number; // 1-6
-  targets: DailyTarget[];
-  weeklyGoal: string;
-}
-
 export interface SixWeekPlan {
   id: string;
   name: string;
   startDate: string;
-  weeks: WeeklyPlan[];
+  tasks: DailyTarget[];
   createdAt: string;
 }

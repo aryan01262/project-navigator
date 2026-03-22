@@ -6,6 +6,8 @@ interface AppContextType {
   setRole: (role: Role) => void;
   plan: SixWeekPlan | null;
   createPlan: (plan: SixWeekPlan) => void;
+  addTask: (task: DailyTarget) => void;
+  deleteTask: (taskId: string) => void;
   forwardTarget: (targetId: string) => void;
   logTarget: (targetId: string, completedQty: number, isDone: boolean, note: string) => void;
   validateTarget: (targetId: string, constraintLog: string) => void;
@@ -31,22 +33,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     if (plan) localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));
+    else localStorage.removeItem(STORAGE_KEY);
   }, [plan]);
 
   const updateTarget = useCallback((targetId: string, updater: (t: DailyTarget) => DailyTarget) => {
     setPlan(prev => {
       if (!prev) return prev;
-      return {
-        ...prev,
-        weeks: prev.weeks.map(w => ({
-          ...w,
-          targets: w.targets.map(t => t.id === targetId ? updater(t) : t),
-        })),
-      };
+      return { ...prev, tasks: prev.tasks.map(t => t.id === targetId ? updater(t) : t) };
     });
   }, []);
 
   const createPlan = useCallback((p: SixWeekPlan) => setPlan(p), []);
+
+  const addTask = useCallback((task: DailyTarget) => {
+    setPlan(prev => {
+      if (!prev) return prev;
+      return { ...prev, tasks: [...prev.tasks, task] };
+    });
+  }, []);
+
+  const deleteTask = useCallback((taskId: string) => {
+    setPlan(prev => {
+      if (!prev) return prev;
+      return { ...prev, tasks: prev.tasks.filter(t => t.id !== taskId) };
+    });
+  }, []);
 
   const forwardTarget = useCallback((targetId: string) => {
     updateTarget(targetId, t => ({ ...t, status: 'forwarded' }));
@@ -65,7 +76,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [updateTarget]);
 
   return (
-    <AppContext.Provider value={{ role, setRole, plan, createPlan, forwardTarget, logTarget, validateTarget, confirmTarget }}>
+    <AppContext.Provider value={{ role, setRole, plan, createPlan, addTask, deleteTask, forwardTarget, logTarget, validateTarget, confirmTarget }}>
       {children}
     </AppContext.Provider>
   );

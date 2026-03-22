@@ -3,12 +3,14 @@ import { useAppContext } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { AlertCircle, Check, X } from 'lucide-react';
 
 export const SupervisorPanel = () => {
   const { plan, logTarget } = useAppContext();
-  const [selectedWeek, setSelectedWeek] = useState(0);
+  const [weekFilter, setWeekFilter] = useState<string>('all');
   const [formData, setFormData] = useState<Record<string, { qty: string; done: boolean; note: string }>>({});
 
   if (!plan) {
@@ -21,60 +23,50 @@ export const SupervisorPanel = () => {
     );
   }
 
-  const week = plan.weeks[selectedWeek];
-  const forwardedTargets = week.targets.filter(t => t.status === 'forwarded');
-  const loggedTargets = week.targets.filter(t => ['logged', 'validated', 'confirmed'].includes(t.status));
+  const allTasks = plan.tasks.filter(t => weekFilter === 'all' || t.weekNumber === Number(weekFilter));
+  const forwarded = allTasks.filter(t => t.status === 'forwarded');
+  const logged = allTasks.filter(t => ['logged', 'validated', 'confirmed'].includes(t.status));
 
   const getForm = (id: string) => formData[id] || { qty: '', done: false, note: '' };
-  const setForm = (id: string, data: Partial<{ qty: string; done: boolean; note: string }>) => {
-    setFormData(prev => ({ ...prev, [id]: { ...getForm(id), ...data } }));
+  const setForm = (id: string, d: Partial<{ qty: string; done: boolean; note: string }>) => {
+    setFormData(p => ({ ...p, [id]: { ...getForm(id), ...d } }));
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-foreground mb-1">Supervisor Portal</h1>
         <p className="text-muted-foreground">Log daily task completion and quantities</p>
       </div>
 
-      {/* Week selector */}
-      <div className="flex gap-1 overflow-x-auto pb-1">
-        {plan.weeks.map((w, i) => (
-          <button key={i} onClick={() => setSelectedWeek(i)}
-            className={`px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-all active:scale-[0.97] ${selectedWeek === i ? 'bg-secondary text-secondary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}>
-            Week {w.weekNumber}
-          </button>
-        ))}
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-card rounded-lg border p-3">
-          <p className="text-xs text-muted-foreground">Pending Review</p>
-          <p className="text-xl font-bold text-secondary">{forwardedTargets.length}</p>
-        </div>
-        <div className="bg-card rounded-lg border p-3">
-          <p className="text-xs text-muted-foreground">Logged</p>
-          <p className="text-xl font-bold text-success">{loggedTargets.length}</p>
+      <div className="flex items-center gap-2">
+        <Select value={weekFilter} onValueChange={setWeekFilter}>
+          <SelectTrigger className="w-[120px] h-9 text-sm"><SelectValue placeholder="All Weeks" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Weeks</SelectItem>
+            {[1,2,3,4,5,6].map(w => <SelectItem key={w} value={String(w)}>Week {w}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <div className="flex gap-3 text-sm">
+          <span className="text-muted-foreground">Pending: <strong className="text-secondary">{forwarded.length}</strong></span>
+          <span className="text-muted-foreground">Logged: <strong className="text-success">{logged.length}</strong></span>
         </div>
       </div>
 
-      {/* Forwarded targets to log */}
+      {/* Tasks to review */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Tasks to Review</h3>
-        {forwardedTargets.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No tasks forwarded yet. Engineer needs to forward daily targets.</p>}
-        {forwardedTargets.map(t => {
+        {forwarded.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">No tasks forwarded yet.</p>}
+        {forwarded.map(t => {
           const form = getForm(t.id);
           return (
             <div key={t.id} className="bg-card rounded-lg border p-4 space-y-3 animate-fade-in">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-foreground">Day {t.dayNumber}</span>
-                <span className="text-xs text-muted-foreground">{t.date}</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-medium">{t.trade}</span>
+                <span className="text-xs text-muted-foreground">· {t.zone} · {t.contractor}</span>
                 <StatusBadge status={t.status} />
               </div>
-              <p className="text-sm text-foreground">{t.description}</p>
-              <p className="text-xs text-muted-foreground">Target: {t.targetQuantity} {t.unit}</p>
-
+              <p className="text-xs text-muted-foreground">Target: {t.targetQuantity} {t.unit} · Date: {t.date}</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Completed Qty</label>
@@ -92,10 +84,8 @@ export const SupervisorPanel = () => {
                   </div>
                 </div>
               </div>
-
               <Textarea placeholder="Add note (optional)..." value={form.note} onChange={e => setForm(t.id, { note: e.target.value })} rows={2} className="text-sm" />
-
-              <Button size="sm" onClick={() => { logTarget(t.id, Number(form.qty) || 0, form.done, form.note); }} disabled={!form.qty}>
+              <Button size="sm" onClick={() => logTarget(t.id, Number(form.qty) || 0, form.done, form.note)} disabled={!form.qty}>
                 Log Task
               </Button>
             </div>
@@ -103,20 +93,32 @@ export const SupervisorPanel = () => {
         })}
       </div>
 
-      {/* Already logged */}
-      {loggedTargets.length > 0 && (
+      {/* Logged tasks */}
+      {logged.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-semibold text-foreground">Logged Tasks</h3>
-          {loggedTargets.map(t => (
-            <div key={t.id} className="bg-card rounded-lg border p-3 flex items-center gap-3 opacity-80 animate-fade-in">
-              <div className={`w-2 h-2 rounded-full ${t.isDone ? 'bg-success' : 'bg-destructive'}`} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-foreground">{t.description}</p>
-                <p className="text-xs text-muted-foreground">{t.completedQuantity}/{t.targetQuantity} {t.unit}</p>
-              </div>
-              <StatusBadge status={t.status} />
-            </div>
-          ))}
+          <div className="bg-card rounded-lg border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead>Trade</TableHead>
+                  <TableHead>Zone</TableHead>
+                  <TableHead>Completed</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {logged.map(t => (
+                  <TableRow key={t.id}>
+                    <TableCell className="text-sm font-medium">{t.trade}</TableCell>
+                    <TableCell className="text-sm">{t.zone}</TableCell>
+                    <TableCell className="text-sm">{t.completedQuantity}/{t.targetQuantity} {t.unit}</TableCell>
+                    <TableCell><StatusBadge status={t.status} /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
     </div>
