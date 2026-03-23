@@ -69,7 +69,7 @@ export const EngineerPanel = () => {
                 <TableHead>W</TableHead>
                 <TableHead>Contractor</TableHead>
                 <TableHead>Trade</TableHead>
-                <TableHead>Floor</TableHead>
+                <TableHead>Sub-Activity</TableHead>
                 <TableHead>Qty</TableHead>
                 <TableHead className="w-[100px]">Action</TableHead>
               </TableRow>
