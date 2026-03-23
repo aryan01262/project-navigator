@@ -60,6 +60,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
+  const addContractor = useCallback((name: string) => {
+    setPlan(prev => {
+      if (!prev) return prev;
+      if (prev.contractors.includes(name)) return prev;
+      return { ...prev, contractors: [...prev.contractors, name] };
+    });
+  }, []);
+
   const forwardTarget = useCallback((targetId: string) => {
     updateTarget(targetId, t => ({ ...t, status: 'forwarded' }));
   }, [updateTarget]);
