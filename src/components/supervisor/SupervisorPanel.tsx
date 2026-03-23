@@ -111,7 +111,7 @@ export const SupervisorPanel = () => {
                 {logged.map(t => (
                   <TableRow key={t.id}>
                     <TableCell className="text-sm font-medium">{t.trade}</TableCell>
-                    <TableCell className="text-sm">{t.zone}</TableCell>
+                    <TableCell className="text-sm">{t.floor}</TableCell>
                     <TableCell className="text-sm">{t.completedQuantity}/{t.targetQuantity} {t.unit}</TableCell>
                     <TableCell><StatusBadge status={t.status} /></TableCell>
                   </TableRow>

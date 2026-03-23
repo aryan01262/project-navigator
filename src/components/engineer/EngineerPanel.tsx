@@ -109,7 +109,7 @@ export const EngineerPanel = () => {
             <div key={t.id} className="bg-card rounded-lg border p-4 space-y-3 animate-fade-in">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-medium">{t.trade}</span>
-                <span className="text-xs text-muted-foreground">· {t.zone} · {t.contractor}</span>
+                <span className="text-xs text-muted-foreground">· {t.floor} · {t.contractor}</span>
                 <StatusBadge status={t.status} />
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
