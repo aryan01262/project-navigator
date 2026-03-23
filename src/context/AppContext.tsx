@@ -8,6 +8,7 @@ interface AppContextType {
   createPlan: (plan: SixWeekPlan) => void;
   addTask: (task: DailyTarget) => void;
   deleteTask: (taskId: string) => void;
+  addContractor: (name: string) => void;
   forwardTarget: (targetId: string) => void;
   logTarget: (targetId: string, completedQty: number, isDone: boolean, note: string) => void;
   validateTarget: (targetId: string, constraintLog: string) => void;
@@ -28,7 +29,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [role, setRole] = useState<Role>('admin');
   const [plan, setPlan] = useState<SixWeekPlan | null>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : null;
+    if (!saved) return null;
+    const parsed = JSON.parse(saved);
+    // Migrate old plans missing new fields
+    if (parsed && !parsed.endDate) parsed.endDate = '';
+    if (parsed && !parsed.contractors) parsed.contractors = [];
+    if (parsed?.tasks) {
+      parsed.tasks = parsed.tasks.map((t: any) => ({
+        ...t,
+        floor: t.floor || t.zone || '',
+        grandTarget: t.grandTarget || 0,
+      }));
+    }
+    return parsed;
   });
 
   useEffect(() => {
@@ -59,6 +72,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
+  const addContractor = useCallback((name: string) => {
+    setPlan(prev => {
+      if (!prev) return prev;
+      if (prev.contractors.includes(name)) return prev;
+      return { ...prev, contractors: [...prev.contractors, name] };
+    });
+  }, []);
+
   const forwardTarget = useCallback((targetId: string) => {
     updateTarget(targetId, t => ({ ...t, status: 'forwarded' }));
   }, [updateTarget]);
@@ -76,7 +97,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [updateTarget]);
 
   return (
-    <AppContext.Provider value={{ role, setRole, plan, createPlan, addTask, deleteTask, forwardTarget, logTarget, validateTarget, confirmTarget }}>
+    <AppContext.Provider value={{ role, setRole, plan, createPlan, addTask, deleteTask, addContractor, forwardTarget, logTarget, validateTarget, confirmTarget }}>
       {children}
     </AppContext.Provider>
   );

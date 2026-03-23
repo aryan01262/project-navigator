@@ -69,7 +69,7 @@ export const EngineerPanel = () => {
                 <TableHead>W</TableHead>
                 <TableHead>Contractor</TableHead>
                 <TableHead>Trade</TableHead>
-                <TableHead>Zone</TableHead>
+                <TableHead>Floor</TableHead>
                 <TableHead>Qty</TableHead>
                 <TableHead className="w-[100px]">Action</TableHead>
               </TableRow>
@@ -87,7 +87,7 @@ export const EngineerPanel = () => {
                     <TableCell className="text-sm">W{t.weekNumber}</TableCell>
                     <TableCell className="text-sm">{t.contractor}</TableCell>
                     <TableCell className="text-sm font-medium">{t.trade}</TableCell>
-                    <TableCell className="text-sm">{t.zone}</TableCell>
+                    <TableCell className="text-sm">{t.floor}</TableCell>
                     <TableCell className="text-sm">{t.targetQuantity} {t.unit}</TableCell>
                     <TableCell>
                       <Button size="sm" onClick={() => forwardTarget(t.id)} disabled={!canForward} variant={canForward ? 'default' : 'outline'}>
@@ -109,7 +109,7 @@ export const EngineerPanel = () => {
             <div key={t.id} className="bg-card rounded-lg border p-4 space-y-3 animate-fade-in">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-medium">{t.trade}</span>
-                <span className="text-xs text-muted-foreground">· {t.zone} · {t.contractor}</span>
+                <span className="text-xs text-muted-foreground">· {t.floor} · {t.contractor}</span>
                 <StatusBadge status={t.status} />
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">

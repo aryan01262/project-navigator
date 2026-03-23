@@ -63,7 +63,7 @@ export const SupervisorPanel = () => {
             <div key={t.id} className="bg-card rounded-lg border p-4 space-y-3 animate-fade-in">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-medium">{t.trade}</span>
-                <span className="text-xs text-muted-foreground">· {t.zone} · {t.contractor}</span>
+                <span className="text-xs text-muted-foreground">· {t.floor} · {t.contractor}</span>
                 <StatusBadge status={t.status} />
               </div>
               <p className="text-xs text-muted-foreground">Target: {t.targetQuantity} {t.unit} · Date: {t.date}</p>
@@ -102,7 +102,7 @@ export const SupervisorPanel = () => {
               <TableHeader>
                 <TableRow className="bg-muted/50">
                   <TableHead>Trade</TableHead>
-                  <TableHead>Zone</TableHead>
+                  <TableHead>Floor</TableHead>
                   <TableHead>Completed</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
@@ -111,7 +111,7 @@ export const SupervisorPanel = () => {
                 {logged.map(t => (
                   <TableRow key={t.id}>
                     <TableCell className="text-sm font-medium">{t.trade}</TableCell>
-                    <TableCell className="text-sm">{t.zone}</TableCell>
+                    <TableCell className="text-sm">{t.floor}</TableCell>
                     <TableCell className="text-sm">{t.completedQuantity}/{t.targetQuantity} {t.unit}</TableCell>
                     <TableCell><StatusBadge status={t.status} /></TableCell>
                   </TableRow>
