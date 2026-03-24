@@ -1,18 +1,28 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { Role, SixWeekPlan, DailyTarget } from '@/types/planner';
+import type { Role, Project, SixWeekPlan, WeeklyPlan, Contractor } from '@/types/planner';
+import { DEFAULT_CONTRACTORS } from '@/types/planner';
 
 interface AppContextType {
   role: Role;
   setRole: (role: Role) => void;
-  plan: SixWeekPlan | null;
-  createPlan: (plan: SixWeekPlan) => void;
-  addTask: (task: DailyTarget) => void;
-  deleteTask: (taskId: string) => void;
-  addContractor: (name: string) => void;
-  forwardTarget: (targetId: string) => void;
-  logTarget: (targetId: string, completedQty: number, isDone: boolean, note: string) => void;
-  validateTarget: (targetId: string, constraintLog: string) => void;
-  confirmTarget: (targetId: string) => void;
+  // Contractors
+  contractors: Contractor[];
+  addContractor: (contractor: Contractor) => void;
+  // Projects
+  projects: Project[];
+  createProject: (project: Project) => void;
+  activeProjectId: string | null;
+  setActiveProjectId: (id: string | null) => void;
+  // 6-week plans
+  addSixWeekPlan: (projectId: string, plan: SixWeekPlan) => void;
+  // Weekly plans
+  addWeeklyPlan: (projectId: string, sixWeekPlanId: string, plan: WeeklyPlan) => void;
+  assignToEngineer: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string) => void;
+  // Engineer & Supervisor actions
+  forwardToSupervisor: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string) => void;
+  logTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, completedQty: number, isDone: boolean, note: string) => void;
+  validateTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, constraintLog: string) => void;
+  confirmTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -23,82 +33,98 @@ export const useAppContext = () => {
   return ctx;
 };
 
-const STORAGE_KEY = 'sixweek-planner';
+const STORAGE_KEY = 'sixweek-planner-v2';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [role, setRole] = useState<Role>('admin');
-  const [plan, setPlan] = useState<SixWeekPlan | null>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return null;
-    const parsed = JSON.parse(saved);
-    // Migrate old plans missing new fields
-    if (parsed && !parsed.endDate) parsed.endDate = '';
-    if (parsed && !parsed.contractors) parsed.contractors = [];
-    if (parsed?.tasks) {
-      parsed.tasks = parsed.tasks.map((t: any) => ({
-        ...t,
-        floor: t.floor || t.zone || '',
-        subActivity: t.subActivity || t.floor || t.zone || '',
-        grandTarget: t.grandTarget || 0,
-      }));
-    }
-    return parsed;
+  const [contractors, setContractors] = useState<Contractor[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY + '-contractors');
+    return saved ? JSON.parse(saved) : DEFAULT_CONTRACTORS;
   });
+  const [projects, setProjects] = useState<Project[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY + '-projects');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (plan) localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));
-    else localStorage.removeItem(STORAGE_KEY);
-  }, [plan]);
+    localStorage.setItem(STORAGE_KEY + '-contractors', JSON.stringify(contractors));
+  }, [contractors]);
 
-  const updateTarget = useCallback((targetId: string, updater: (t: DailyTarget) => DailyTarget) => {
-    setPlan(prev => {
-      if (!prev) return prev;
-      return { ...prev, tasks: prev.tasks.map(t => t.id === targetId ? updater(t) : t) };
-    });
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY + '-projects', JSON.stringify(projects));
+  }, [projects]);
+
+  const addContractor = useCallback((c: Contractor) => {
+    setContractors(prev => [...prev, c]);
   }, []);
 
-  const createPlan = useCallback((p: SixWeekPlan) => setPlan(p), []);
-
-  const addTask = useCallback((task: DailyTarget) => {
-    setPlan(prev => {
-      if (!prev) return prev;
-      return { ...prev, tasks: [...prev.tasks, task] };
-    });
+  const createProject = useCallback((p: Project) => {
+    setProjects(prev => [...prev, p]);
+    setActiveProjectId(p.id);
   }, []);
 
-  const deleteTask = useCallback((taskId: string) => {
-    setPlan(prev => {
-      if (!prev) return prev;
-      return { ...prev, tasks: prev.tasks.filter(t => t.id !== taskId) };
-    });
+  const addSixWeekPlan = useCallback((projectId: string, plan: SixWeekPlan) => {
+    setProjects(prev => prev.map(p =>
+      p.id === projectId ? { ...p, sixWeekPlans: [...p.sixWeekPlans, plan] } : p
+    ));
   }, []);
 
-  const addContractor = useCallback((name: string) => {
-    setPlan(prev => {
-      if (!prev) return prev;
-      if (prev.contractors.includes(name)) return prev;
-      return { ...prev, contractors: [...prev.contractors, name] };
-    });
+  const addWeeklyPlan = useCallback((projectId: string, sixWeekPlanId: string, wp: WeeklyPlan) => {
+    setProjects(prev => prev.map(p =>
+      p.id === projectId ? {
+        ...p,
+        sixWeekPlans: p.sixWeekPlans.map(swp =>
+          swp.id === sixWeekPlanId ? { ...swp, weeklyPlans: [...swp.weeklyPlans, wp] } : swp
+        )
+      } : p
+    ));
   }, []);
 
-  const forwardTarget = useCallback((targetId: string) => {
-    updateTarget(targetId, t => ({ ...t, status: 'forwarded' }));
-  }, [updateTarget]);
+  const updateWeeklyPlan = useCallback((projectId: string, sixWeekPlanId: string, weeklyPlanId: string, updater: (wp: WeeklyPlan) => WeeklyPlan) => {
+    setProjects(prev => prev.map(p =>
+      p.id === projectId ? {
+        ...p,
+        sixWeekPlans: p.sixWeekPlans.map(swp =>
+          swp.id === sixWeekPlanId ? {
+            ...swp,
+            weeklyPlans: swp.weeklyPlans.map(wp => wp.id === weeklyPlanId ? updater(wp) : wp)
+          } : swp
+        )
+      } : p
+    ));
+  }, []);
 
-  const logTarget = useCallback((targetId: string, completedQuantity: number, isDone: boolean, supervisorNote: string) => {
-    updateTarget(targetId, t => ({ ...t, status: 'logged', completedQuantity, isDone, supervisorNote }));
-  }, [updateTarget]);
+  const assignToEngineer = useCallback((projectId: string, sixWeekPlanId: string, weeklyPlanId: string) => {
+    updateWeeklyPlan(projectId, sixWeekPlanId, weeklyPlanId, wp => ({ ...wp, assignedToEngineer: true, status: 'assigned' }));
+  }, [updateWeeklyPlan]);
 
-  const validateTarget = useCallback((targetId: string, constraintLog: string) => {
-    updateTarget(targetId, t => ({ ...t, status: 'validated', constraintLog, validatedByEngineer: true }));
-  }, [updateTarget]);
+  const forwardToSupervisor = useCallback((projectId: string, sixWeekPlanId: string, weeklyPlanId: string) => {
+    updateWeeklyPlan(projectId, sixWeekPlanId, weeklyPlanId, wp => ({ ...wp, status: 'forwarded' }));
+  }, [updateWeeklyPlan]);
 
-  const confirmTarget = useCallback((targetId: string) => {
-    updateTarget(targetId, t => ({ ...t, status: 'confirmed', confirmedByAdmin: true }));
-  }, [updateTarget]);
+  const logTarget = useCallback((projectId: string, sixWeekPlanId: string, weeklyPlanId: string, completedQuantity: number, isDone: boolean, supervisorNote: string) => {
+    updateWeeklyPlan(projectId, sixWeekPlanId, weeklyPlanId, wp => ({ ...wp, status: 'logged', completedQuantity, isDone, supervisorNote }));
+  }, [updateWeeklyPlan]);
+
+  const validateTarget = useCallback((projectId: string, sixWeekPlanId: string, weeklyPlanId: string, constraintLog: string) => {
+    updateWeeklyPlan(projectId, sixWeekPlanId, weeklyPlanId, wp => ({ ...wp, status: 'validated', constraintLog, validatedByEngineer: true }));
+  }, [updateWeeklyPlan]);
+
+  const confirmTarget = useCallback((projectId: string, sixWeekPlanId: string, weeklyPlanId: string) => {
+    updateWeeklyPlan(projectId, sixWeekPlanId, weeklyPlanId, wp => ({ ...wp, status: 'confirmed', confirmedByAdmin: true }));
+  }, [updateWeeklyPlan]);
 
   return (
-    <AppContext.Provider value={{ role, setRole, plan, createPlan, addTask, deleteTask, addContractor, forwardTarget, logTarget, validateTarget, confirmTarget }}>
+    <AppContext.Provider value={{
+      role, setRole,
+      contractors, addContractor,
+      projects, createProject,
+      activeProjectId, setActiveProjectId,
+      addSixWeekPlan,
+      addWeeklyPlan, assignToEngineer,
+      forwardToSupervisor, logTarget, validateTarget, confirmTarget,
+    }}>
       {children}
     </AppContext.Provider>
   );
