@@ -31,6 +31,28 @@ export interface SixWeekPlan {
   weeklyPlans: WeeklyPlan[];
 }
 
+export interface DailyPlan {
+  id: string;
+  weeklyPlanId: string;
+  dayNumber: number; // 1-7 (Mon-Sun)
+  date: string;
+  plannedQuantity: number;
+  unit: string;
+  constraint: string;
+  floorUnits: string;
+  engineerNote?: string;
+  // Supervisor fields
+  completedQuantity?: number;
+  isDone?: boolean;
+  supervisorNote?: string;
+  // Engineer validation
+  constraintLog?: string;
+  validatedByEngineer?: boolean;
+  // Admin confirmation
+  confirmedByAdmin?: boolean;
+  status: 'pending' | 'assigned' | 'forwarded' | 'logged' | 'validated' | 'confirmed';
+}
+
 export interface WeeklyPlan {
   id: string;
   sixWeekPlanId: string;
@@ -45,15 +67,7 @@ export interface WeeklyPlan {
   constraint: string;
   status: 'pending' | 'assigned' | 'forwarded' | 'logged' | 'validated' | 'confirmed';
   assignedToEngineer: boolean;
-  // Supervisor fields
-  completedQuantity?: number;
-  isDone?: boolean;
-  supervisorNote?: string;
-  // Engineer validation
-  constraintLog?: string;
-  validatedByEngineer?: boolean;
-  // Admin confirmation
-  confirmedByAdmin?: boolean;
+  dailyPlans: DailyPlan[];
 }
 
 // Dummy data for dropdowns

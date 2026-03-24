@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { Role, Project, SixWeekPlan, WeeklyPlan, Contractor } from '@/types/planner';
+import type { Role, Project, SixWeekPlan, WeeklyPlan, DailyPlan, Contractor } from '@/types/planner';
 import { DEFAULT_CONTRACTORS } from '@/types/planner';
 
 interface AppContextType {
