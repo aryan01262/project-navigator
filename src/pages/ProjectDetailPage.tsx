@@ -74,10 +74,29 @@ const ProjectDetailPage = () => {
   // Supervisor log
   const [logQty, setLogQty] = useState('');
   const [logNote, setLogNote] = useState('');
-
+const [editingId, setEditingId] = useState(null);
+const [editData, setEditData] = useState({});
   // Engineer submit
   const [submitConstraint, setSubmitConstraint] = useState('');
+const handleEdit = (row) => {
+  setEditingId(row.id);
+  setEditData({ ...row });
+};
 
+const handleChange = (field, value) => {
+  setEditData(prev => ({ ...prev, [field]: value }));
+};
+
+const handleSave = () => {
+  swp.activities = swp.activities.map(item =>
+    item.id === editingId ? editData : item
+  );
+  setEditingId(null);
+};
+
+const handleDelete = (id) => {
+  swp.activities = swp.activities.filter(item => item.id !== id);
+};
   const planEndDate = useMemo(() => {
     if (!planStartDate) return null;
     const sixWeeksOut = addDays(planStartDate, 41);
@@ -200,35 +219,95 @@ const ProjectDetailPage = () => {
               </CardHeader>
               {expandedPlan === swp.id && (
                 <CardContent className="space-y-3">
+                  
                   {/* Activities Table */}
                   <div className="border rounded-lg overflow-x-auto">
                     <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/30">
-                          <TableHead className="text-xs">Category</TableHead>
-                          <TableHead className="text-xs">Contractor</TableHead>
-                          <TableHead className="text-xs">Trade</TableHead>
-                          <TableHead className="text-xs">Trade Activity</TableHead>
-                          <TableHead className="text-xs">Unit</TableHead>
-                          <TableHead className="text-xs">Est. Qty</TableHead>
-                          <TableHead className="text-xs">Floor</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {swp.activities.map(act => (
-                          <TableRow key={act.id}>
-                            <TableCell className="text-xs">{act.category}</TableCell>
-                            <TableCell className="text-xs">{getContractorName(act.contractorId)}</TableCell>
-                             <TableCell className="text-xs">{act.trade}</TableCell>
-                            <TableCell className="text-xs">{act.tradeActivity}</TableCell>
-                            <TableCell className="text-xs">{act.unit}</TableCell>
-                            <TableCell className="text-xs">{act.estimatedQuantity}</TableCell>
-                            <TableCell className="text-xs">{act.floorUnits}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                     <TableHeader> 
+                      <TableRow className="bg-muted/30"> 
+                  <TableHead className="text-xs">Category</TableHead> 
+                  <TableHead className="text-xs">Contractor</TableHead>
+                   <TableHead className="text-xs">Trade</TableHead> 
+                   <TableHead className="text-xs">Trade Activity</TableHead>
+                    <TableHead className="text-xs">Unit</TableHead>
+                     <TableHead className="text-xs">Est. Qty</TableHead> 
+                     <TableHead className="text-xs">Floor</TableHead> 
+                     <TableHead className="text-xs">Actions</TableHead> 
+
+                     </TableRow> </TableHeader>
+                <TableBody>
+  {swp.activities.map(act => (
+    <TableRow key={act.id}>
+      
+      {/* Category */}
+      <TableCell className="text-xs">
+        {editingId === act.id ? (
+          <Input value={editData.category} onChange={(e) => handleChange("category", e.target.value)} />
+        ) : act.category}
+      </TableCell>
+
+      {/* Contractor */}
+      <TableCell className="text-xs">
+        {editingId === act.id ? (
+          <Input value={editData.contractorId} onChange={(e) => handleChange("contractorId", e.target.value)} />
+        ) : getContractorName(act.contractorId)}
+      </TableCell>
+
+      {/* Trade */}
+      <TableCell className="text-xs">
+        {editingId === act.id ? (
+          <Input value={editData.trade} onChange={(e) => handleChange("trade", e.target.value)} />
+        ) : act.trade}
+      </TableCell>
+
+      {/* Trade Activity */}
+      <TableCell className="text-xs">
+        {editingId === act.id ? (
+          <Input value={editData.tradeActivity} onChange={(e) => handleChange("tradeActivity", e.target.value)} />
+        ) : act.tradeActivity}
+      </TableCell>
+
+      {/* Unit */}
+      <TableCell className="text-xs">
+        {editingId === act.id ? (
+          <Input value={editData.unit} onChange={(e) => handleChange("unit", e.target.value)} />
+        ) : act.unit}
+      </TableCell>
+
+      {/* Quantity */}
+      <TableCell className="text-xs">
+        {editingId === act.id ? (
+          <Input value={editData.estimatedQuantity} onChange={(e) => handleChange("estimatedQuantity", e.target.value)} />
+        ) : act.estimatedQuantity}
+      </TableCell>
+
+      {/* Floor */}
+      <TableCell className="text-xs">
+        {editingId === act.id ? (
+          <Input value={editData.floorUnits} onChange={(e) => handleChange("floorUnits", e.target.value)} />
+        ) : act.floorUnits}
+      </TableCell>
+
+      {/* Actions */}
+      <TableCell className="text-xs space-x-2">
+        {editingId === act.id ? (
+          <>
+            <button onClick={handleSave} className="text-green-600">Save</button>
+            <button onClick={() => setEditingId(null)} className="text-gray-500">Cancel</button>
+          </>
+        ) : (
+          <>
+            <button onClick={() => handleEdit(act)} className="text-blue-600">Edit</button>
+            <button onClick={() => handleDelete(act.id)} className="text-red-600">Delete</button>
+          </>
+        )}
+      </TableCell>
+
+    </TableRow>
+  ))}
+</TableBody>
+</Table>
+</div>
 
                   <div className="flex justify-end">
                     <Button size="sm" onClick={() => setShowCreateWeekly(swp.id)}><Plus className="w-4 h-4" /> Sub-Week Plan</Button>
