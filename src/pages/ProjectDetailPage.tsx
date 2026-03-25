@@ -13,11 +13,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { format, addDays, nextSunday } from 'date-fns';
-import { ArrowLeft, Plus, CalendarIcon, Send, Check, CalendarDays, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Plus, CalendarIcon, Send, Check, CalendarDays, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react';
 import { CATEGORIES, TRADE_ACTIVITIES, UNITS, FLOOR_UNITS, CONSTRAINTS } from '@/types/planner';
 import type { SixWeekPlan, WeeklyPlan, DailyPlan } from '@/types/planner';
 
-const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const ProjectDetailPage = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -25,7 +25,7 @@ const ProjectDetailPage = () => {
   const {
     projects, contractors, role,
     addSixWeekPlan, addWeeklyPlan, assignToEngineer,
-    addDailyPlan, forwardDailyToSupervisor, logDailyTarget, validateDailyTarget, confirmDailyTarget,
+    addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
   } = useAppContext();
 
   const project = projects.find(p => p.id === projectId);
@@ -69,8 +69,8 @@ const ProjectDetailPage = () => {
   const [logQty, setLogQty] = useState('');
   const [logNote, setLogNote] = useState('');
 
-  // Engineer validate
-  const [valConstraint, setValConstraint] = useState('');
+  // Engineer submit
+  const [submitConstraint, setSubmitConstraint] = useState('');
 
   const planEndDate = useMemo(() => {
     if (!planStartDate) return null;
@@ -82,7 +82,6 @@ const ProjectDetailPage = () => {
 
   const getContractorName = (id: string) => contractors.find(c => c.id === id)?.name || id;
 
-  // Gather all daily plans across all weekly plans for supervisor/engineer views
   const allDailyPlans = project.sixWeekPlans.flatMap(swp =>
     swp.weeklyPlans.flatMap(wp =>
       wp.dailyPlans.map(dp => ({
@@ -149,6 +148,11 @@ const ProjectDetailPage = () => {
           <ArrowLeft className="w-4 h-4" /> Back
         </Button>
         <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
+        {role === 'admin' && (
+          <Button variant="outline" size="sm" className="ml-auto" onClick={() => navigate(`/projects/${projectId}/reports`)}>
+            <BarChart3 className="w-4 h-4" /> Reports
+          </Button>
+        )}
       </div>
 
       {/* =================== ADMIN VIEW =================== */}
@@ -204,7 +208,8 @@ const ProjectDetailPage = () => {
                                   <TableRow className="bg-muted/30">
                                     <TableHead className="text-xs">Day</TableHead>
                                     <TableHead className="text-xs">Date</TableHead>
-                                    <TableHead className="text-xs">Planned Qty</TableHead>
+                                    <TableHead className="text-xs">Planned</TableHead>
+                                    <TableHead className="text-xs">Actual</TableHead>
                                     <TableHead className="text-xs">Floor</TableHead>
                                     <TableHead className="text-xs">Constraint</TableHead>
                                     <TableHead className="text-xs">Status</TableHead>
@@ -217,11 +222,12 @@ const ProjectDetailPage = () => {
                                       <TableCell className="text-xs">{DAY_NAMES[dp.dayNumber - 1]}</TableCell>
                                       <TableCell className="text-xs">{dp.date}</TableCell>
                                       <TableCell className="text-xs">{dp.plannedQuantity} {wp.unit}</TableCell>
+                                      <TableCell className="text-xs font-medium">{dp.completedQuantity !== undefined ? `${dp.completedQuantity} ${wp.unit}` : '—'}</TableCell>
                                       <TableCell className="text-xs">{dp.floorUnits}</TableCell>
-                                      <TableCell className="text-xs">{dp.constraint || '—'}</TableCell>
+                                      <TableCell className="text-xs">{dp.constraintLog || dp.constraint || '—'}</TableCell>
                                       <TableCell><StatusBadge status={dp.status} /></TableCell>
                                       <TableCell>
-                                        {dp.status === 'validated' && (
+                                        {dp.status === 'submitted' && (
                                           <Button size="sm" variant="default" onClick={() => confirmDailyTarget(project.id, swp.id, wp.id, dp.id)}>
                                             <Check className="w-3 h-3" /> Confirm
                                           </Button>
@@ -286,6 +292,7 @@ const ProjectDetailPage = () => {
                                 <TableHead className="text-xs font-semibold">Day</TableHead>
                                 <TableHead className="text-xs font-semibold">Date</TableHead>
                                 <TableHead className="text-xs font-semibold">Planned Qty</TableHead>
+                                <TableHead className="text-xs font-semibold">Actual Qty</TableHead>
                                 <TableHead className="text-xs font-semibold">Floor</TableHead>
                                 <TableHead className="text-xs font-semibold">Constraint</TableHead>
                                 <TableHead className="text-xs font-semibold">Note</TableHead>
@@ -299,9 +306,10 @@ const ProjectDetailPage = () => {
                                   <TableCell className="text-xs">{DAY_NAMES[dp.dayNumber - 1]}</TableCell>
                                   <TableCell className="text-xs">{dp.date}</TableCell>
                                   <TableCell className="text-xs font-medium">{dp.plannedQuantity} {wp.unit}</TableCell>
+                                  <TableCell className="text-xs">{dp.completedQuantity !== undefined ? `${dp.completedQuantity} ${wp.unit}` : '—'}</TableCell>
                                   <TableCell className="text-xs">{dp.floorUnits}</TableCell>
                                   <TableCell className="text-xs">{dp.constraint || '—'}</TableCell>
-                                  <TableCell className="text-xs">{dp.engineerNote || '—'}</TableCell>
+                                  <TableCell className="text-xs">{dp.supervisorNote || dp.engineerNote || '—'}</TableCell>
                                   <TableCell><StatusBadge status={dp.status} /></TableCell>
                                   <TableCell className="space-x-1">
                                     {dp.status === 'pending' && (
@@ -311,15 +319,17 @@ const ProjectDetailPage = () => {
                                     )}
                                     {dp.status === 'logged' && (
                                       <div className="flex items-center gap-1">
-                                        <Select value={valConstraint} onValueChange={setValConstraint}>
+                                        <Select value={submitConstraint} onValueChange={setSubmitConstraint}>
                                           <SelectTrigger className="h-7 w-[120px] text-xs"><SelectValue placeholder="Constraint" /></SelectTrigger>
                                           <SelectContent>{CONSTRAINTS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                                         </Select>
-                                        <Button size="sm" onClick={() => { validateDailyTarget(project.id, wp.swpId, wp.id, dp.id, valConstraint); setValConstraint(''); }}>
-                                          Validate
+                                        <Button size="sm" onClick={() => { submitDailyTarget(project.id, wp.swpId, wp.id, dp.id, submitConstraint); setSubmitConstraint(''); }}>
+                                          Submit
                                         </Button>
                                       </div>
                                     )}
+                                    {dp.status === 'submitted' && <span className="text-xs text-muted-foreground">Awaiting admin confirmation</span>}
+                                    {dp.status === 'confirmed' && <span className="text-xs text-accent">✓ Confirmed</span>}
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -379,7 +389,7 @@ const ProjectDetailPage = () => {
                             </Button>
                           </div>
                         )}
-                        {dp.status === 'logged' && <span className="text-xs text-muted-foreground">Done: {dp.completedQuantity} — {dp.supervisorNote}</span>}
+                        {dp.status === 'logged' && <span className="text-xs text-muted-foreground">Done: {dp.completedQuantity} — Sent to Engineer</span>}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -457,10 +467,10 @@ const ProjectDetailPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Create Daily Plan (Engineer) */}
+      {/* Create Daily Plan (Engineer) — 6 days only */}
       <Dialog open={!!showCreateDaily} onOpenChange={() => setShowCreateDaily(null)}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Add Daily Plan</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Add Daily Plan (Mon-Sat)</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>

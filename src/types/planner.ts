@@ -50,7 +50,7 @@ export interface DailyPlan {
   validatedByEngineer?: boolean;
   // Admin confirmation
   confirmedByAdmin?: boolean;
-  status: 'pending' | 'assigned' | 'forwarded' | 'logged' | 'validated' | 'confirmed';
+  status: 'pending' | 'assigned' | 'forwarded' | 'logged' | 'submitted' | 'validated' | 'confirmed';
 }
 
 export interface WeeklyPlan {
@@ -65,7 +65,7 @@ export interface WeeklyPlan {
   estimatedQuantity: number;
   floorUnits: string;
   constraint: string;
-  status: 'pending' | 'assigned' | 'forwarded' | 'logged' | 'validated' | 'confirmed';
+  status: 'pending' | 'assigned' | 'forwarded' | 'logged' | 'submitted' | 'validated' | 'confirmed';
   assignedToEngineer: boolean;
   dailyPlans: DailyPlan[];
 }

@@ -17,7 +17,7 @@ interface AppContextType {
   addDailyPlan: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, daily: DailyPlan) => void;
   forwardDailyToSupervisor: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string) => void;
   logDailyTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string, completedQty: number, isDone: boolean, note: string) => void;
-  validateDailyTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string, constraintLog: string) => void;
+  submitDailyTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string, constraintLog: string) => void;
   confirmDailyTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string) => void;
 }
 
@@ -89,8 +89,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateDailyPlan(pid, swpId, wpId, dpId, dp => ({ ...dp, status: 'logged', completedQuantity, isDone, supervisorNote }));
   }, [updateDailyPlan]);
 
-  const validateDailyTarget = useCallback((pid: string, swpId: string, wpId: string, dpId: string, constraintLog: string) => {
-    updateDailyPlan(pid, swpId, wpId, dpId, dp => ({ ...dp, status: 'validated', constraintLog, validatedByEngineer: true }));
+  const submitDailyTarget = useCallback((pid: string, swpId: string, wpId: string, dpId: string, constraintLog: string) => {
+    updateDailyPlan(pid, swpId, wpId, dpId, dp => ({ ...dp, status: 'submitted', constraintLog, validatedByEngineer: true }));
   }, [updateDailyPlan]);
 
   const confirmDailyTarget = useCallback((pid: string, swpId: string, wpId: string, dpId: string) => {
@@ -102,7 +102,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       role, setRole, contractors, addContractor,
       projects, createProject, activeProjectId, setActiveProjectId,
       addSixWeekPlan, addWeeklyPlan, assignToEngineer,
-      addDailyPlan, forwardDailyToSupervisor, logDailyTarget, validateDailyTarget, confirmDailyTarget,
+      addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
     }}>
       {children}
     </AppContext.Provider>

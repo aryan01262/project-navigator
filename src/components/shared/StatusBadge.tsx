@@ -5,7 +5,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   assigned:  { label: 'Assigned',  className: 'bg-primary/10 text-primary border-primary/20' },
   forwarded: { label: 'Forwarded', className: 'bg-secondary/10 text-secondary border-secondary/20' },
   logged:    { label: 'Logged',    className: 'bg-accent/10 text-accent border-accent/20' },
-  validated: { label: 'Validated', className: 'bg-primary/20 text-primary border-primary/30' },
+  submitted: { label: 'Submitted', className: 'bg-primary/20 text-primary border-primary/30' },
   confirmed: { label: 'Confirmed', className: 'bg-accent text-accent-foreground border-accent/20' },
 };
 
