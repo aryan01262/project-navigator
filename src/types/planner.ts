@@ -15,16 +15,21 @@ export interface Project {
   sixWeekPlans: SixWeekPlan[];
 }
 
-export interface SixWeekPlan {
+export interface PlanActivity {
   id: string;
-  projectId: string;
-  name: string;
   category: string;
   contractorId: string;
   tradeActivity: string;
   unit: string;
   estimatedQuantity: number;
   floorUnits: string;
+}
+
+export interface SixWeekPlan {
+  id: string;
+  projectId: string;
+  name: string;
+  activities: PlanActivity[];
   startDate: string;
   endDate: string;
   createdAt: string;

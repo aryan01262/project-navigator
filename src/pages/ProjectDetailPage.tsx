@@ -13,11 +13,21 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { format, addDays, nextSunday } from 'date-fns';
-import { ArrowLeft, Plus, CalendarIcon, Send, Check, CalendarDays, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react';
+import { ArrowLeft, Plus, CalendarIcon, Send, Check, CalendarDays, ChevronDown, ChevronRight, BarChart3, Trash2, Pencil } from 'lucide-react';
 import { CATEGORIES, TRADE_ACTIVITIES, UNITS, FLOOR_UNITS, CONSTRAINTS } from '@/types/planner';
-import type { SixWeekPlan, WeeklyPlan, DailyPlan } from '@/types/planner';
+import type { SixWeekPlan, WeeklyPlan, DailyPlan, PlanActivity } from '@/types/planner';
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+const emptyActivity = (): PlanActivity => ({
+  id: crypto.randomUUID(),
+  category: '',
+  contractorId: '',
+  tradeActivity: '',
+  unit: '',
+  estimatedQuantity: 0,
+  floorUnits: '',
+});
 
 const ProjectDetailPage = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -40,12 +50,8 @@ const ProjectDetailPage = () => {
   // 6-week plan form
   const [planName, setPlanName] = useState('');
   const [planStartDate, setPlanStartDate] = useState<Date>();
-  const [planCategory, setPlanCategory] = useState('');
-  const [planContractor, setPlanContractor] = useState('');
-  const [planTrade, setPlanTrade] = useState('');
-  const [planUnit, setPlanUnit] = useState('');
-  const [planEstQty, setPlanEstQty] = useState('');
-  const [planFloor, setPlanFloor] = useState('');
+  const [planActivities, setPlanActivities] = useState<PlanActivity[]>([emptyActivity()]);
+  const [editingActivityIdx, setEditingActivityIdx] = useState<number | null>(0);
 
   // Weekly plan form
   const [wpCategory, setWpCategory] = useState('');
@@ -97,19 +103,36 @@ const ProjectDetailPage = () => {
     )
   );
 
+  // Activity CRUD helpers
+  const updateActivity = (idx: number, field: keyof PlanActivity, value: string | number) => {
+    setPlanActivities(prev => prev.map((a, i) => i === idx ? { ...a, [field]: value } : a));
+  };
+
+  const removeActivity = (idx: number) => {
+    setPlanActivities(prev => prev.filter((_, i) => i !== idx));
+    if (editingActivityIdx === idx) setEditingActivityIdx(null);
+    else if (editingActivityIdx !== null && editingActivityIdx > idx) setEditingActivityIdx(editingActivityIdx - 1);
+  };
+
+  const addActivity = () => {
+    const newAct = emptyActivity();
+    setPlanActivities(prev => [...prev, newAct]);
+    setEditingActivityIdx(planActivities.length);
+  };
+
   const handleCreatePlan = () => {
-    if (!planName || !planStartDate || !planEndDate || !planCategory || !planContractor) return;
+    if (!planName || !planStartDate || !planEndDate || planActivities.length === 0) return;
+    const validActivities = planActivities.filter(a => a.category && a.contractorId && a.tradeActivity);
+    if (validActivities.length === 0) return;
     const plan: SixWeekPlan = {
       id: crypto.randomUUID(), projectId: project.id, name: planName,
-      category: planCategory, contractorId: planContractor, tradeActivity: planTrade,
-      unit: planUnit, estimatedQuantity: Number(planEstQty) || 0, floorUnits: planFloor,
+      activities: validActivities,
       startDate: format(planStartDate, 'yyyy-MM-dd'), endDate: format(planEndDate, 'yyyy-MM-dd'),
       createdAt: new Date().toISOString(), weeklyPlans: [],
     };
     addSixWeekPlan(project.id, plan);
     setShowCreatePlan(false);
-    setPlanName(''); setPlanCategory(''); setPlanContractor(''); setPlanTrade('');
-    setPlanUnit(''); setPlanEstQty(''); setPlanFloor(''); setPlanStartDate(undefined);
+    setPlanName(''); setPlanStartDate(undefined); setPlanActivities([emptyActivity()]); setEditingActivityIdx(0);
   };
 
   const handleCreateWeekly = (sixWeekPlanId: string) => {
@@ -168,14 +191,42 @@ const ProjectDetailPage = () => {
                 <CardTitle className="text-base flex items-center justify-between">
                   <span className="flex items-center gap-1">
                     {expandedPlan === swp.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                    {swp.name} — {swp.category}
+                    {swp.name}
                   </span>
                   <span className="text-xs text-muted-foreground font-normal">{swp.startDate} → {swp.endDate}</span>
                 </CardTitle>
-                <p className="text-sm text-muted-foreground">{swp.tradeActivity} · {getContractorName(swp.contractorId)} · {swp.estimatedQuantity} {swp.unit}</p>
+                <p className="text-sm text-muted-foreground">{swp.activities.length} activit{swp.activities.length === 1 ? 'y' : 'ies'}</p>
               </CardHeader>
               {expandedPlan === swp.id && (
                 <CardContent className="space-y-3">
+                  {/* Activities Table */}
+                  <div className="border rounded-lg overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/30">
+                          <TableHead className="text-xs">Category</TableHead>
+                          <TableHead className="text-xs">Contractor</TableHead>
+                          <TableHead className="text-xs">Trade Activity</TableHead>
+                          <TableHead className="text-xs">Unit</TableHead>
+                          <TableHead className="text-xs">Est. Qty</TableHead>
+                          <TableHead className="text-xs">Floor</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {swp.activities.map(act => (
+                          <TableRow key={act.id}>
+                            <TableCell className="text-xs">{act.category}</TableCell>
+                            <TableCell className="text-xs">{getContractorName(act.contractorId)}</TableCell>
+                            <TableCell className="text-xs">{act.tradeActivity}</TableCell>
+                            <TableCell className="text-xs">{act.unit}</TableCell>
+                            <TableCell className="text-xs">{act.estimatedQuantity}</TableCell>
+                            <TableCell className="text-xs">{act.floorUnits}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
                   <div className="flex justify-end">
                     <Button size="sm" onClick={() => setShowCreateWeekly(swp.id)}><Plus className="w-4 h-4" /> Sub-Week Plan</Button>
                   </div>
@@ -402,11 +453,11 @@ const ProjectDetailPage = () => {
 
       {/* =================== DIALOGS =================== */}
 
-      {/* Create 6-Week Plan */}
+      {/* Create 6-Week Plan with Multiple Activities */}
       <Dialog open={showCreatePlan} onOpenChange={setShowCreatePlan}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Create 6-Week Plan</DialogTitle></DialogHeader>
-          <div className="space-y-3 max-h-[70vh] overflow-y-auto">
+          <div className="space-y-4">
             <div><Label>Plan Name</Label><Input value={planName} onChange={e => setPlanName(e.target.value)} placeholder="e.g. RCC Phase 1" className="mt-1" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -428,17 +479,114 @@ const ProjectDetailPage = () => {
                 <Input readOnly value={planEndDate ? format(planEndDate, 'PPP') : '—'} className="mt-1 bg-muted/50 cursor-not-allowed" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Category</Label><Select value={planCategory} onValueChange={setPlanCategory}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
-              <div><Label>Contractor</Label><Select value={planContractor} onValueChange={setPlanContractor}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{contractors.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
+
+            {/* Activities CRUD */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-semibold">Activities ({planActivities.length})</Label>
+                <Button size="sm" variant="outline" onClick={addActivity}><Plus className="w-3 h-3" /> Add Activity</Button>
+              </div>
+
+              {/* Activities list */}
+              {planActivities.length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="text-xs">#</TableHead>
+                        <TableHead className="text-xs">Category</TableHead>
+                        <TableHead className="text-xs">Contractor</TableHead>
+                        <TableHead className="text-xs">Trade</TableHead>
+                        <TableHead className="text-xs">Unit</TableHead>
+                        <TableHead className="text-xs">Qty</TableHead>
+                        <TableHead className="text-xs">Floor</TableHead>
+                        <TableHead className="text-xs w-20">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {planActivities.map((act, idx) => (
+                        <TableRow key={act.id} className={editingActivityIdx === idx ? 'bg-primary/5' : ''}>
+                          <TableCell className="text-xs font-mono">{idx + 1}</TableCell>
+                          <TableCell className="text-xs">{act.category || '—'}</TableCell>
+                          <TableCell className="text-xs">{act.contractorId ? getContractorName(act.contractorId) : '—'}</TableCell>
+                          <TableCell className="text-xs">{act.tradeActivity || '—'}</TableCell>
+                          <TableCell className="text-xs">{act.unit || '—'}</TableCell>
+                          <TableCell className="text-xs">{act.estimatedQuantity || '—'}</TableCell>
+                          <TableCell className="text-xs">{act.floorUnits || '—'}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditingActivityIdx(editingActivityIdx === idx ? null : idx)}>
+                                <Pencil className="w-3 h-3" />
+                              </Button>
+                              {planActivities.length > 1 && (
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => removeActivity(idx)}>
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Edit form for selected activity */}
+              {editingActivityIdx !== null && planActivities[editingActivityIdx] && (
+                <div className="border rounded-lg p-3 bg-muted/20 space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground">Editing Activity #{editingActivityIdx + 1}</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Category</Label>
+                      <Select value={planActivities[editingActivityIdx].category} onValueChange={v => updateActivity(editingActivityIdx, 'category', v)}>
+                        <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                        <SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Contractor</Label>
+                      <Select value={planActivities[editingActivityIdx].contractorId} onValueChange={v => updateActivity(editingActivityIdx, 'contractorId', v)}>
+                        <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                        <SelectContent>{contractors.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Trade Activity</Label>
+                    <Select value={planActivities[editingActivityIdx].tradeActivity} onValueChange={v => updateActivity(editingActivityIdx, 'tradeActivity', v)}>
+                      <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>{TRADE_ACTIVITIES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <Label className="text-xs">Unit</Label>
+                      <Select value={planActivities[editingActivityIdx].unit} onValueChange={v => updateActivity(editingActivityIdx, 'unit', v)}>
+                        <SelectTrigger className="mt-1"><SelectValue placeholder="Unit" /></SelectTrigger>
+                        <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Est. Quantity</Label>
+                      <Input type="number" value={planActivities[editingActivityIdx].estimatedQuantity || ''} onChange={e => updateActivity(editingActivityIdx, 'estimatedQuantity', Number(e.target.value))} placeholder="500" className="mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Floor Units</Label>
+                      <Select value={planActivities[editingActivityIdx].floorUnits} onValueChange={v => updateActivity(editingActivityIdx, 'floorUnits', v)}>
+                        <SelectTrigger className="mt-1"><SelectValue placeholder="Floor" /></SelectTrigger>
+                        <SelectContent>{FLOOR_UNITS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <Button size="sm" variant="secondary" onClick={() => setEditingActivityIdx(null)}>Done Editing</Button>
+                </div>
+              )}
             </div>
-            <div><Label>Trade Activity</Label><Select value={planTrade} onValueChange={setPlanTrade}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{TRADE_ACTIVITIES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent></Select></div>
-            <div className="grid grid-cols-3 gap-3">
-              <div><Label>Unit</Label><Select value={planUnit} onValueChange={setPlanUnit}><SelectTrigger className="mt-1"><SelectValue placeholder="Unit" /></SelectTrigger><SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select></div>
-              <div><Label>Est. Quantity</Label><Input type="number" value={planEstQty} onChange={e => setPlanEstQty(e.target.value)} placeholder="500" className="mt-1" /></div>
-              <div><Label>Floor Units</Label><Select value={planFloor} onValueChange={setPlanFloor}><SelectTrigger className="mt-1"><SelectValue placeholder="Floor" /></SelectTrigger><SelectContent>{FLOOR_UNITS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent></Select></div>
-            </div>
-            <Button onClick={handleCreatePlan} disabled={!planName || !planStartDate || !planCategory || !planContractor} className="w-full">Create 6-Week Plan</Button>
+
+            <Button onClick={handleCreatePlan} disabled={!planName || !planStartDate || planActivities.filter(a => a.category && a.contractorId && a.tradeActivity).length === 0} className="w-full">
+              Initiate Planned Activity
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
