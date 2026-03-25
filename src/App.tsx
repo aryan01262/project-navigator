@@ -8,6 +8,7 @@ import { AppShell } from "@/components/AppShell";
 import ProjectsPage from "./pages/ProjectsPage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
 import ContractorsPage from "./pages/ContractorsPage";
+import ReportsPage from "./pages/ReportsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ const App = () => (
             <Route element={<AppShell />}>
               <Route path="/" element={<ProjectsPage />} />
               <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+              <Route path="/projects/:projectId/reports" element={<ReportsPage />} />
               <Route path="/contractors" element={<ContractorsPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
