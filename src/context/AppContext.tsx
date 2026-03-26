@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { Role, Project, SixWeekPlan, WeeklyPlan, DailyPlan, Contractor } from '@/types/planner';
+import type { Role, Project, SixWeekPlan, WeeklyPlan, DailyPlan, Contractor, PlanActivity } from '@/types/planner';
 import { DEFAULT_CONTRACTORS } from '@/types/planner';
 
 interface AppContextType {
@@ -12,6 +12,7 @@ interface AppContextType {
   activeProjectId: string | null;
   setActiveProjectId: (id: string | null) => void;
   addSixWeekPlan: (projectId: string, plan: SixWeekPlan) => void;
+  updateSixWeekPlanActivities: (projectId: string, sixWeekPlanId: string, activities: PlanActivity[]) => void;
   addWeeklyPlan: (projectId: string, sixWeekPlanId: string, plan: WeeklyPlan) => void;
   assignToEngineer: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string) => void;
   addDailyPlan: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, daily: DailyPlan) => void;
@@ -51,6 +52,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addSixWeekPlan = useCallback((projectId: string, plan: SixWeekPlan) => {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, sixWeekPlans: [...p.sixWeekPlans, plan] } : p));
+  }, []);
+
+  const updateSixWeekPlanActivities = useCallback((projectId: string, sixWeekPlanId: string, activities: PlanActivity[]) => {
+    setProjects(prev => prev.map(p => p.id === projectId ? {
+      ...p, sixWeekPlans: p.sixWeekPlans.map(swp => swp.id === sixWeekPlanId ? { ...swp, activities } : swp)
+    } : p));
   }, []);
 
   const addWeeklyPlan = useCallback((projectId: string, sixWeekPlanId: string, wp: WeeklyPlan) => {
@@ -101,7 +108,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       role, setRole, contractors, addContractor,
       projects, createProject, activeProjectId, setActiveProjectId,
-      addSixWeekPlan, addWeeklyPlan, assignToEngineer,
+      addSixWeekPlan, updateSixWeekPlanActivities, addWeeklyPlan, assignToEngineer,
       addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
     }}>
       {children}
