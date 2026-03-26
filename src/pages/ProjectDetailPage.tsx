@@ -68,9 +68,9 @@ const ProjectDetailPage = () => {
   const [dpDay, setDpDay] = useState('1');
   const [dpQty, setDpQty] = useState('');
   const [dpConstraint, setDpConstraint] = useState('');
-  const [dpFloor, setDpFloor] = useState('');
+  const [dpFloor, setDpFloor] = useState([]);
   const [dpNote, setDpNote] = useState('');
-
+  const [dpUnits, setDpUnits] = useState('');
   // Supervisor log
   const [logQty, setLogQty] = useState('');
   const [logNote, setLogNote] = useState('');
@@ -162,11 +162,11 @@ const ProjectDetailPage = () => {
     const daily: DailyPlan = {
       id: crypto.randomUUID(), weeklyPlanId: showCreateDaily.wpId,
       dayNumber: Number(dpDay), date: dpDate,
-      plannedQuantity: Number(dpQty), unit: '', constraint: dpConstraint,
-      floorUnits: dpFloor, engineerNote: dpNote, status: 'pending',
+      plannedQuantity: Number(dpQty), unit: dpUnits, constraint: dpConstraint,
+      floorUnits: dpFloor, engineerNote: dpNote, status: 'pending', 
     };
     addDailyPlan(project.id, showCreateDaily.swpId, showCreateDaily.wpId, daily);
-    setDpDate(''); setDpQty(''); setDpConstraint(''); setDpFloor(''); setDpNote(''); setDpDay('1');
+    setDpDate(''); setDpQty(''); setDpConstraint(''); setDpFloor([]); setDpNote(''); setDpDay('1'); setDpUnits('')
     setShowCreateDaily(null);
   };
 
@@ -174,6 +174,34 @@ const ProjectDetailPage = () => {
   const currentSwpForWeekly = showCreateWeekly ? project.sixWeekPlans.find(s => s.id === showCreateWeekly) : null;
   const selectedActivity = currentSwpForWeekly?.activities.find(a => a.id === wpActivityId);
     console.log(selectedActivity)
+    const assignedWeeklyPlans = project.sixWeekPlans.flatMap(swp =>
+  swp.weeklyPlans
+    .filter(wp => wp.assignedToEngineer)
+    .map(wp => ({
+      ...wp,
+      swpId: swp.id,
+      planName: swp.name
+    }))
+);
+const allowedFloors = [
+  ...new Set(
+    assignedWeeklyPlans.flatMap(wp =>
+      Array.isArray(wp.floorUnits)
+        ? wp.floorUnits
+        : wp.floorUnits
+        ? wp.floorUnits.split(",")
+        : []
+    )
+  )
+];
+const maxAllowedQty = assignedWeeklyPlans.reduce(
+  (sum, wp) => sum + Number(wp.estimatedQuantity || 0),
+  0
+);
+
+const allowedUnit = assignedWeeklyPlans.length
+  ? assignedWeeklyPlans[0].unit
+  : "";
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
@@ -915,10 +943,55 @@ const ProjectDetailPage = () => {
         </DialogContent>
       </Dialog>
 
+ {/* {project.sixWeekPlans.flatMap(swp =>
+                swp.weeklyPlans.filter(wp => wp.assignedToEngineer).map(wp => ({ ...wp, swpId: swp.id, planName: swp.name }))
+              ) */}
+
+
       {/* Create Daily Plan (Engineer) — 6 days only */}
       <Dialog open={!!showCreateDaily} onOpenChange={() => setShowCreateDaily(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader><DialogTitle>Add Daily Plan (Mon-Sat)</DialogTitle></DialogHeader>
+          {assignedWeeklyPlans.length > 0 && (
+  <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+    <p className="text-xs font-semibold text-muted-foreground">
+      Assigned Weekly Plans
+    </p>
+
+    {assignedWeeklyPlans.map((wp, index) => (
+      <div key={index} className="border rounded p-2 bg-background">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+
+          <span className="text-muted-foreground">Plan Name:</span>
+          <span>{wp.planName}</span>
+
+          <span className="text-muted-foreground">SWP ID:</span>
+          <span>{wp.swpId}</span>
+
+          <span className="text-muted-foreground">Activity ID:</span>
+          <span>{wp.id}</span>
+
+          <span className="text-muted-foreground">Week:</span>
+          <span>Week {wp.weekNumber}</span>
+
+          <span className="text-muted-foreground">Estimated Quantity:</span>
+          <span>{wp.estimatedQuantity}</span>
+
+          <span className="text-muted-foreground">Unit:</span>
+          <span>{wp.unit}</span>
+
+          <span className="text-muted-foreground">Floor Units:</span>
+          <span>
+            {Array.isArray(wp.floorUnits)
+              ? wp.floorUnits.join(", ")
+              : wp.floorUnits || "—"}
+          </span>
+
+        </div>
+      </div>
+    ))}
+  </div>
+)}
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -934,25 +1007,104 @@ const ProjectDetailPage = () => {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
+             <div>
+  <Label>Planned Quantity (units/day)</Label>
+
+  <Input
+    type="number"
+    value={dpQty}
+    onChange={(e) => {
+      const value = Number(e.target.value);
+
+      if (value > maxAllowedQty) {
+        alert(`Max allowed quantity is ${maxAllowedQty}`);
+        return;
+      }
+
+      setDpQty(e.target.value);
+    }}
+    placeholder="e.g. 50"
+    className="mt-1"
+  />
+
+  {/* Inline error (better UX) */}
+  {dpQty > maxAllowedQty && (
+    <p className="text-red-500 text-xs mt-1">
+      Cannot exceed {maxAllowedQty}
+    </p>
+  )}
+</div>
+
               <div>
-                <Label>Planned Quantity (units/day)</Label>
-                <Input type="number" value={dpQty} onChange={e => setDpQty(e.target.value)} placeholder="e.g. 50" className="mt-1" />
-              </div>
+  <Label className="text-xs">Unit</Label>
+
+  <Select value={dpUnits} onValueChange={(v) => setDpUnits(v)}>
+    <SelectTrigger className="mt-1">
+      <SelectValue placeholder="Select" />
+    </SelectTrigger>
+
+    <SelectContent>
+      {allowedUnit ? (
+        <SelectItem value={allowedUnit}>{allowedUnit}</SelectItem>
+      ) : (
+        UNITS.map((u) => (
+          <SelectItem key={u} value={u}>
+            {u}
+          </SelectItem>
+        ))
+      )}
+    </SelectContent>
+  </Select>
+</div>
               <div>
-                <Label>Floor</Label>
-                <Select value={dpFloor} onValueChange={setDpFloor}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Floor" /></SelectTrigger>
-                  <SelectContent>{FLOOR_UNITS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
+  <Label>Floor</Label>
+
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button variant="outline" className="w-full mt-1 justify-between">
+        {dpFloor?.length
+          ? dpFloor.join(", ")
+          : "Select Floor"}
+      </Button>
+    </DropdownMenuTrigger>
+
+    <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
+      {allowedFloors.map((f) => {
+        const selected = dpFloor || [];
+        const checked = selected.includes(f);
+
+        return (
+          <div key={f} className="flex items-center gap-2 px-2 py-1">
+            <Checkbox
+              checked={checked}
+              onCheckedChange={(isChecked) => {
+                let updated;
+
+                if (isChecked) {
+                  updated = [...selected, f];
+                } else {
+                  updated = selected.filter((item) => item !== f);
+                }
+
+                setDpFloor(updated);
+              }}
+            />
+            <span className="text-sm">{f}</span>
+          </div>
+        );
+      })}
+    </DropdownMenuContent>
+  </DropdownMenu>
+</div>
+<div>
               <Label>Constraint</Label>
               <Select value={dpConstraint} onValueChange={setDpConstraint}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Select constraint" /></SelectTrigger>
                 <SelectContent>{CONSTRAINTS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            </div>
+            
             <div>
               <Label>Engineer Note (optional)</Label>
               <Input value={dpNote} onChange={e => setDpNote(e.target.value)} placeholder="Any remarks for this day" className="mt-1" />
