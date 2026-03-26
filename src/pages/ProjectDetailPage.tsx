@@ -173,7 +173,7 @@ const ProjectDetailPage = () => {
   // Get the current six-week plan for the sub-week dialog
   const currentSwpForWeekly = showCreateWeekly ? project.sixWeekPlans.find(s => s.id === showCreateWeekly) : null;
   const selectedActivity = currentSwpForWeekly?.activities.find(a => a.id === wpActivityId);
-    console.log(selectedActivity)
+    console.log(selectedActivity, project.sixWeekPlans)
     const assignedWeeklyPlans = project.sixWeekPlans.flatMap(swp =>
   swp.weeklyPlans
     .filter(wp => wp.assignedToEngineer)
@@ -183,25 +183,25 @@ const ProjectDetailPage = () => {
       planName: swp.name
     }))
 );
-const allowedFloors = [
-  ...new Set(
-    assignedWeeklyPlans.flatMap(wp =>
-      Array.isArray(wp.floorUnits)
-        ? wp.floorUnits
-        : wp.floorUnits
-        ? wp.floorUnits.split(",")
-        : []
-    )
-  )
-];
-const maxAllowedQty = assignedWeeklyPlans.reduce(
-  (sum, wp) => sum + Number(wp.estimatedQuantity || 0),
-  0
-);
 
-const allowedUnit = assignedWeeklyPlans.length
-  ? assignedWeeklyPlans[0].unit
-  : "";
+
+
+
+  const selectedWp = assignedWeeklyPlans.find(
+  (wp) =>
+    wp.id === showCreateDaily?.wpId &&
+    wp.swpId === showCreateDaily?.swpId
+);
+console.log(selectedWp)
+const allowedFloors = Array.isArray(selectedWp?.floorUnits)
+  ? selectedWp.floorUnits
+  : selectedWp?.floorUnits
+  ? selectedWp.floorUnits.split(",")
+  : [];
+
+const allowedUnit = selectedWp?.unit || "";
+
+const maxAllowedQty = Number(selectedWp?.estimatedQuantity || 0);
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
@@ -952,44 +952,44 @@ const allowedUnit = assignedWeeklyPlans.length
       <Dialog open={!!showCreateDaily} onOpenChange={() => setShowCreateDaily(null)}>
         <DialogContent className="sm:max-w-4xl">
           <DialogHeader><DialogTitle>Add Daily Plan (Mon-Sat)</DialogTitle></DialogHeader>
-          {assignedWeeklyPlans.length > 0 && (
+          {selectedWp  && (
   <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
     <p className="text-xs font-semibold text-muted-foreground">
       Assigned Weekly Plans
     </p>
 
-    {assignedWeeklyPlans.map((wp, index) => (
-      <div key={index} className="border rounded p-2 bg-background">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+    {selectedWp && (
+  <div className="border rounded p-2 bg-background">
+    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
 
-          <span className="text-muted-foreground">Plan Name:</span>
-          <span>{wp.planName}</span>
+      <span className="text-muted-foreground">Plan Name:</span>
+      <span>{selectedWp.planName}</span>
 
-          <span className="text-muted-foreground">SWP ID:</span>
-          <span>{wp.swpId}</span>
+      <span className="text-muted-foreground">SWP ID:</span>
+      <span>{selectedWp.swpId}</span>
 
-          <span className="text-muted-foreground">Activity ID:</span>
-          <span>{wp.id}</span>
+      <span className="text-muted-foreground">Activity ID:</span>
+      <span>{selectedWp.id}</span>
 
-          <span className="text-muted-foreground">Week:</span>
-          <span>Week {wp.weekNumber}</span>
+      <span className="text-muted-foreground">Week:</span>
+      <span>Week {selectedWp.weekNumber}</span>
 
-          <span className="text-muted-foreground">Estimated Quantity:</span>
-          <span>{wp.estimatedQuantity}</span>
+      <span className="text-muted-foreground">Estimated Quantity:</span>
+      <span>{selectedWp.estimatedQuantity}</span>
 
-          <span className="text-muted-foreground">Unit:</span>
-          <span>{wp.unit}</span>
+      <span className="text-muted-foreground">Unit:</span>
+      <span>{selectedWp.unit}</span>
 
-          <span className="text-muted-foreground">Floor Units:</span>
-          <span>
-            {Array.isArray(wp.floorUnits)
-              ? wp.floorUnits.join(", ")
-              : wp.floorUnits || "—"}
-          </span>
+      <span className="text-muted-foreground">Floor Units:</span>
+      <span>
+        {Array.isArray(selectedWp.floorUnits)
+          ? selectedWp.floorUnits.join(", ")
+          : selectedWp.floorUnits || "—"}
+      </span>
 
-        </div>
-      </div>
-    ))}
+    </div>
+  </div>
+)}
   </div>
 )}
           <div className="space-y-3">
