@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { Role, Project, SixWeekPlan, WeeklyPlan, DailyPlan, Contractor } from '@/types/planner';
+import type { Role, Project, SixWeekPlan, WeeklyPlan, DailyPlan, Contractor, PlanActivity } from '@/types/planner';
 import { DEFAULT_CONTRACTORS } from '@/types/planner';
 
 interface AppContextType {
@@ -12,6 +12,7 @@ interface AppContextType {
   activeProjectId: string | null;
   setActiveProjectId: (id: string | null) => void;
   addSixWeekPlan: (projectId: string, plan: SixWeekPlan) => void;
+  updateSixWeekPlanActivities: (projectId: string, sixWeekPlanId: string, activities: PlanActivity[]) => void;
   addWeeklyPlan: (projectId: string, sixWeekPlanId: string, plan: WeeklyPlan) => void;
   assignToEngineer: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string) => void;
   addDailyPlan: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, daily: DailyPlan) => void;
