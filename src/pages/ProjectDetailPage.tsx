@@ -208,11 +208,12 @@ const ProjectDetailPage = () => {
               </CardHeader>
               {expandedPlan === swp.id && (
                 <CardContent className="space-y-3">
-                  {/* Activities Table */}
+                  {/* Activities Table with CRUD */}
                   <div className="border rounded-lg overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/30">
+                          <TableHead className="text-xs">#</TableHead>
                           <TableHead className="text-xs">Category</TableHead>
                           <TableHead className="text-xs">Contractor</TableHead>
                           <TableHead className="text-xs">Trade</TableHead>
@@ -220,11 +221,13 @@ const ProjectDetailPage = () => {
                           <TableHead className="text-xs">Unit</TableHead>
                           <TableHead className="text-xs">Est. Qty</TableHead>
                           <TableHead className="text-xs">Floor</TableHead>
+                          <TableHead className="text-xs w-20">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {swp.activities.map(act => (
-                          <TableRow key={act.id}>
+                        {swp.activities.map((act, idx) => (
+                          <TableRow key={act.id} className={editingId === act.id ? 'bg-primary/5' : ''}>
+                            <TableCell className="text-xs font-mono">{idx + 1}</TableCell>
                             <TableCell className="text-xs">{act.category}</TableCell>
                             <TableCell className="text-xs">{getContractorName(act.contractorId)}</TableCell>
                             <TableCell className="text-xs">{act.trade}</TableCell>
@@ -232,13 +235,98 @@ const ProjectDetailPage = () => {
                             <TableCell className="text-xs">{act.unit}</TableCell>
                             <TableCell className="text-xs">{act.estimatedQuantity}</TableCell>
                             <TableCell className="text-xs">{act.floorUnits}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditingId(act.id); setEditData({ ...act }); }}>
+                                  <Pencil className="w-3 h-3" />
+                                </Button>
+                                {swp.activities.length > 1 && (
+                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => {
+                                    const updated = swp.activities.filter(a => a.id !== act.id);
+                                    updateSixWeekPlanActivities(project.id, swp.id, updated);
+                                  }}>
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </div>
 
-                  <div className="flex justify-end">
+                  {/* Inline edit form for existing activity */}
+                  {editingId && editData && swp.activities.some(a => a.id === editingId) && (
+                    <div className="border rounded-lg p-3 bg-muted/20 space-y-3">
+                      <p className="text-xs font-semibold text-muted-foreground">Editing Activity</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs">Category</Label>
+                          <Select value={editData.category} onValueChange={v => setEditData({ ...editData, category: v })}>
+                            <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Contractor</Label>
+                          <Select value={editData.contractorId} onValueChange={v => setEditData({ ...editData, contractorId: v })}>
+                            <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectContent>{contractors.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Trade</Label>
+                        <Select value={editData.trade} onValueChange={v => setEditData({ ...editData, trade: v })}>
+                          <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>{TRADE_ACTIVITIES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Trade Activity</Label>
+                        <Select value={editData.tradeActivity} onValueChange={v => setEditData({ ...editData, tradeActivity: v })}>
+                          <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>{TRADE_ACTIVITIES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <Label className="text-xs">Unit</Label>
+                          <Select value={editData.unit} onValueChange={v => setEditData({ ...editData, unit: v })}>
+                            <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Est. Quantity</Label>
+                          <Input type="number" className="mt-1" value={editData.estimatedQuantity} onChange={e => setEditData({ ...editData, estimatedQuantity: Number(e.target.value) })} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Floor Units</Label>
+                          <Select value={editData.floorUnits} onValueChange={v => setEditData({ ...editData, floorUnits: v })}>
+                            <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectContent>{FLOOR_UNITS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button size="sm" variant="outline" onClick={() => { setEditingId(null); setEditData(null); }}>Cancel</Button>
+                        <Button size="sm" onClick={() => {
+                          const updated = swp.activities.map(a => a.id === editingId ? editData : a);
+                          updateSixWeekPlanActivities(project.id, swp.id, updated);
+                          setEditingId(null); setEditData(null);
+                        }}>Save</Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between">
+                    <Button size="sm" variant="outline" onClick={() => {
+                      const newAct = emptyActivity();
+                      updateSixWeekPlanActivities(project.id, swp.id, [...swp.activities, newAct]);
+                      setEditingId(newAct.id); setEditData({ ...newAct });
+                    }}><Plus className="w-3 h-3" /> Add Activity</Button>
                     <Button size="sm" onClick={() => setShowCreateWeekly(swp.id)}><Plus className="w-4 h-4" /> Sub-Week Plan</Button>
                   </div>
                   {swp.weeklyPlans.length === 0 ? (
