@@ -16,7 +16,8 @@ import { format, addDays, nextSunday } from 'date-fns';
 import { ArrowLeft, Plus, CalendarIcon, Send, Check, CalendarDays, ChevronDown, ChevronRight, BarChart3, Trash2, Pencil } from 'lucide-react';
 import { CATEGORIES, TRADE_ACTIVITIES, UNITS, FLOOR_UNITS, CONSTRAINTS } from '@/types/planner';
 import type { SixWeekPlan, WeeklyPlan, DailyPlan, PlanActivity } from '@/types/planner';
-
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const emptyActivity = (): PlanActivity => ({
@@ -58,7 +59,7 @@ const ProjectDetailPage = () => {
   const [wpActivityId, setWpActivityId] = useState('');
   const [wpUnit, setWpUnit] = useState('');
   const [wpEstQty, setWpEstQty] = useState('');
-  const [wpFloor, setWpFloor] = useState('');
+  const [wpFloor, setWpFloor] = useState([]);
   const [wpWeek, setWpWeek] = useState('1');
   const [wpConstraint, setWpConstraint] = useState('');
 
@@ -234,7 +235,7 @@ const ProjectDetailPage = () => {
                             <TableCell className="text-xs">{act.tradeActivity}</TableCell>
                             <TableCell className="text-xs">{act.unit}</TableCell>
                             <TableCell className="text-xs">{act.estimatedQuantity}</TableCell>
-                            <TableCell className="text-xs">{act.floorUnits}</TableCell>
+                            <TableCell className="text-xs"> {act.floorUnits?.length ? act.floorUnits.join(", ") : "—"}</TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
                                 <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditingId(act.id); setEditData({ ...act }); }}>
@@ -302,13 +303,50 @@ const ProjectDetailPage = () => {
                           <Label className="text-xs">Est. Quantity</Label>
                           <Input type="number" className="mt-1" value={editData.estimatedQuantity} onChange={e => setEditData({ ...editData, estimatedQuantity: Number(e.target.value) })} />
                         </div>
-                        <div>
-                          <Label className="text-xs">Floor Units</Label>
-                          <Select value={editData.floorUnits} onValueChange={v => setEditData({ ...editData, floorUnits: v })}>
-                            <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
-                            <SelectContent>{FLOOR_UNITS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
-                          </Select>
-                        </div>
+                       <div>
+  <Label className="text-xs">Floor Units</Label>
+
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button variant="outline" className="w-full mt-1 justify-between">
+        {editData.floorUnits?.length
+          ? editData.floorUnits.join(", ")
+          : "Select Floor Units"}
+      </Button>
+    </DropdownMenuTrigger>
+
+    <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
+      {FLOOR_UNITS.map((f) => {
+        const selected = editData.floorUnits || [];
+        const checked = selected.includes(f);
+
+        return (
+          <div key={f} className="flex items-center gap-2 px-2 py-1">
+            <Checkbox
+              checked={checked}
+              onCheckedChange={(isChecked) => {
+                let updated;
+
+                if (isChecked) {
+                  updated = [...selected, f];
+                } else {
+                  updated = selected.filter((item) => item !== f);
+                }
+
+                setEditData({
+                  ...editData,
+                  floorUnits: updated,
+                });
+              }}
+            />
+            <span className="text-sm">{f}</span>
+          </div>
+        );
+      })}
+    </DropdownMenuContent>
+  </DropdownMenu>
+</div>
+                        
                       </div>
                       <div className="flex gap-2 justify-end">
                         <Button size="sm" variant="outline" onClick={() => { setEditingId(null); setEditData(null); }}>Cancel</Button>
@@ -554,7 +592,7 @@ const ProjectDetailPage = () => {
 
       {/* Create 6-Week Plan with Multiple Activities */}
       <Dialog open={showCreatePlan} onOpenChange={setShowCreatePlan}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto w-[800px]" >
           <DialogHeader><DialogTitle>Create 6-Week Plan</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div><Label>Plan Name</Label><Input value={planName} onChange={e => setPlanName(e.target.value)} placeholder="e.g. RCC Phase 1" className="mt-1" /></div>
@@ -612,7 +650,9 @@ const ProjectDetailPage = () => {
                           <TableCell className="text-xs">{act.tradeActivity || '—'}</TableCell>
                           <TableCell className="text-xs">{act.unit || '—'}</TableCell>
                           <TableCell className="text-xs">{act.estimatedQuantity || '—'}</TableCell>
-                          <TableCell className="text-xs">{act.floorUnits || '—'}</TableCell>
+                          <TableCell className="text-xs">
+  {act.floorUnits?.length ? act.floorUnits.join(", ") : "—"}
+</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
                               <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditingActivityIdx(editingActivityIdx === idx ? null : idx)}>
@@ -680,13 +720,46 @@ const ProjectDetailPage = () => {
                       <Label className="text-xs">Est. Quantity</Label>
                       <Input type="number" value={planActivities[editingActivityIdx].estimatedQuantity || ''} onChange={e => updateActivity(editingActivityIdx, 'estimatedQuantity', Number(e.target.value))} placeholder="500" className="mt-1" />
                     </div>
-                    <div>
-                      <Label className="text-xs">Floor Units</Label>
-                      <Select value={planActivities[editingActivityIdx].floorUnits} onValueChange={v => updateActivity(editingActivityIdx, 'floorUnits', v)}>
-                        <SelectTrigger className="mt-1"><SelectValue placeholder="Floor" /></SelectTrigger>
-                        <SelectContent>{FLOOR_UNITS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
+<div>
+  <Label className="text-xs">Floor Units</Label>
+
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button variant="outline" className="w-full mt-1 justify-between">
+        {planActivities[editingActivityIdx].floorUnits?.length
+          ? planActivities[editingActivityIdx].floorUnits.join(", ")
+          : "Select Floor Units"}
+      </Button>
+    </DropdownMenuTrigger>
+
+    <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
+      {FLOOR_UNITS.map((f) => {
+        const selectedUnits = planActivities[editingActivityIdx].floorUnits || [];
+        const checked = selectedUnits.includes(f);
+
+        return (
+          <div key={f} className="flex items-center gap-2 px-2 py-1">
+            <Checkbox
+              checked={checked}
+              onCheckedChange={(isChecked) => {
+                let updated;
+
+                if (isChecked) {
+                  updated = [...selectedUnits, f];
+                } else {
+                  updated = selectedUnits.filter((item) => item !== f);
+                }
+
+                updateActivity(editingActivityIdx, "floorUnits", updated);
+              }}
+            />
+            <span className="text-sm">{f}</span>
+          </div>
+        );
+      })}
+    </DropdownMenuContent>
+  </DropdownMenu>
+</div>
                   </div>
                   <Button size="sm" variant="secondary" onClick={() => setEditingActivityIdx(null)}>Done Editing</Button>
                 </div>
@@ -702,7 +775,7 @@ const ProjectDetailPage = () => {
 
       {/* Create Sub-Week Plan — Activity-driven */}
       <Dialog open={!!showCreateWeekly} onOpenChange={() => setShowCreateWeekly(null)}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader><DialogTitle>Create Sub-Week Plan</DialogTitle></DialogHeader>
           <div className="space-y-3 max-h-[70vh] overflow-y-auto">
             {/* Step 1: Select Activity */}
@@ -745,7 +818,8 @@ const ProjectDetailPage = () => {
                   <span className="text-muted-foreground">Trade Activity:</span><span>{selectedActivity.tradeActivity}</span>
                    <span className="text-muted-foreground">Estimated Quantity:</span><span>{selectedActivity.estimatedQuantity}</span>
                     <span className="text-muted-foreground">Units:</span><span>{selectedActivity.unit}</span>
-                    <span className="text-muted-foreground">Floor Unit:</span><span>{selectedActivity.floorUnits}</span>
+                    <span className="text-muted-foreground">Floor Unit:</span><span>{selectedActivity.floorUnits?.length ? selectedActivity.floorUnits.join(", ") : "—"}
+                    </span>
                   
 
                 </div>
@@ -787,13 +861,45 @@ const ProjectDetailPage = () => {
   className="mt-1"
 />
               </div>
-              <div>
-                <Label>Floor Units</Label>
-                <Select value={wpFloor} disabled>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Floor" /></SelectTrigger>
-                  <SelectContent>{FLOOR_UNITS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
+             <div>
+  <Label>Floor Units</Label>
+
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button variant="outline" className="w-full mt-1 justify-between">
+        {wpFloor?.length
+          ? wpFloor.join(", ")
+          : "Select Floor Units"}
+      </Button>
+    </DropdownMenuTrigger>
+
+    <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
+      {(selectedActivity?.floorUnits || []).map((f) => {
+        const checked = wpFloor?.includes(f);
+
+        return (
+          <div key={f} className="flex items-center gap-2 px-2 py-1">
+            <Checkbox
+              checked={checked}
+              onCheckedChange={(isChecked) => {
+                let updated;
+
+                if (isChecked) {
+                  updated = [...(wpFloor || []), f];
+                } else {
+                  updated = (wpFloor || []).filter((item) => item !== f);
+                }
+
+                setWpFloor(updated);
+              }}
+            />
+            <span className="text-sm">{f}</span>
+          </div>
+        );
+      })}
+    </DropdownMenuContent>
+  </DropdownMenu>
+</div>
             </div>
             <div>
               <Label>Constraint</Label>
