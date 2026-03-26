@@ -19,8 +19,8 @@ export interface PlanActivity {
   id: string;
   category: string;
   contractorId: string;
-  tradeActivity: string;
   trade: string;
+  tradeActivity: string;
   unit: string;
   estimatedQuantity: number;
   floorUnits: string;

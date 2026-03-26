@@ -23,6 +23,7 @@ const emptyActivity = (): PlanActivity => ({
   id: crypto.randomUUID(),
   category: '',
   contractorId: '',
+  trade: '',
   tradeActivity: '',
   unit: '',
   estimatedQuantity: 0,
@@ -53,10 +54,8 @@ const ProjectDetailPage = () => {
   const [planActivities, setPlanActivities] = useState<PlanActivity[]>([emptyActivity()]);
   const [editingActivityIdx, setEditingActivityIdx] = useState<number | null>(0);
 
-  // Weekly plan form
-  const [wpCategory, setWpCategory] = useState('');
-  const [wpContractor, setWpContractor] = useState('');
-  const [wpTrade, setWpTrade] = useState('');
+  // Weekly plan form - now activity-driven
+  const [wpActivityId, setWpActivityId] = useState('');
   const [wpUnit, setWpUnit] = useState('');
   const [wpEstQty, setWpEstQty] = useState('');
   const [wpFloor, setWpFloor] = useState('');
@@ -74,29 +73,14 @@ const ProjectDetailPage = () => {
   // Supervisor log
   const [logQty, setLogQty] = useState('');
   const [logNote, setLogNote] = useState('');
-const [editingId, setEditingId] = useState(null);
-const [editData, setEditData] = useState({});
+
+  // Inline editing for activities table
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editData, setEditData] = useState<PlanActivity | null>(null);
+
   // Engineer submit
   const [submitConstraint, setSubmitConstraint] = useState('');
-const handleEdit = (row) => {
-  setEditingId(row.id);
-  setEditData({ ...row });
-};
 
-const handleChange = (field, value) => {
-  setEditData(prev => ({ ...prev, [field]: value }));
-};
-
-const handleSave = () => {
-  swp.activities = swp.activities.map(item =>
-    item.id === editingId ? editData : item
-  );
-  setEditingId(null);
-};
-
-const handleDelete = (id) => {
-  swp.activities = swp.activities.filter(item => item.id !== id);
-};
   const planEndDate = useMemo(() => {
     if (!planStartDate) return null;
     const sixWeeksOut = addDays(planStartDate, 41);
@@ -115,7 +99,6 @@ const handleDelete = (id) => {
         sixWeekPlanId: swp.id,
         taskId: wp.taskId,
         tradeActivity: wp.tradeActivity,
-        trade: wp.trade,
         weekUnit: wp.unit,
         weekEstQty: wp.estimatedQuantity,
         planName: swp.name,
@@ -156,19 +139,21 @@ const handleDelete = (id) => {
   };
 
   const handleCreateWeekly = (sixWeekPlanId: string) => {
-    if (!wpCategory || !wpContractor || !wpTrade) return;
-    const existingCount = project.sixWeekPlans.find(s => s.id === sixWeekPlanId)?.weeklyPlans.length || 0;
+    const swp = project.sixWeekPlans.find(s => s.id === sixWeekPlanId);
+    if (!swp || !wpActivityId) return;
+    const activity = swp.activities.find(a => a.id === wpActivityId);
+    if (!activity) return;
+    const existingCount = swp.weeklyPlans.length;
     const wp: WeeklyPlan = {
       id: crypto.randomUUID(), sixWeekPlanId, weekNumber: Number(wpWeek),
       taskId: `T-${String(existingCount + 1).padStart(3, '0')}`,
-      category: wpCategory, contractorId: wpContractor, tradeActivity: wpTrade,
-      unit: wpUnit, estimatedQuantity: Number(wpEstQty) || 0, floorUnits: wpFloor,
+      category: activity.category, contractorId: activity.contractorId, tradeActivity: activity.tradeActivity,
+      unit: wpUnit || activity.unit, estimatedQuantity: Number(wpEstQty) || 0, floorUnits: wpFloor || activity.floorUnits,
       constraint: wpConstraint, status: 'pending', assignedToEngineer: false, dailyPlans: [],
     };
     addWeeklyPlan(project.id, sixWeekPlanId, wp);
     setShowCreateWeekly(null);
-    setWpCategory(''); setWpContractor(''); setWpTrade(''); setWpUnit('');
-    setWpEstQty(''); setWpFloor(''); setWpConstraint(''); setWpWeek('1');
+    setWpActivityId(''); setWpUnit(''); setWpEstQty(''); setWpFloor(''); setWpConstraint(''); setWpWeek('1');
   };
 
   const handleCreateDaily = () => {
@@ -183,6 +168,10 @@ const handleDelete = (id) => {
     setDpDate(''); setDpQty(''); setDpConstraint(''); setDpFloor(''); setDpNote(''); setDpDay('1');
     setShowCreateDaily(null);
   };
+
+  // Get the current six-week plan for the sub-week dialog
+  const currentSwpForWeekly = showCreateWeekly ? project.sixWeekPlans.find(s => s.id === showCreateWeekly) : null;
+  const selectedActivity = currentSwpForWeekly?.activities.find(a => a.id === wpActivityId);
 
   return (
     <div>
@@ -219,95 +208,35 @@ const handleDelete = (id) => {
               </CardHeader>
               {expandedPlan === swp.id && (
                 <CardContent className="space-y-3">
-                  
                   {/* Activities Table */}
                   <div className="border rounded-lg overflow-x-auto">
                     <Table>
-                     <TableHeader> 
-                      <TableRow className="bg-muted/30"> 
-                  <TableHead className="text-xs">Category</TableHead> 
-                  <TableHead className="text-xs">Contractor</TableHead>
-                   <TableHead className="text-xs">Trade</TableHead> 
-                   <TableHead className="text-xs">Trade Activity</TableHead>
-                    <TableHead className="text-xs">Unit</TableHead>
-                     <TableHead className="text-xs">Est. Qty</TableHead> 
-                     <TableHead className="text-xs">Floor</TableHead> 
-                     <TableHead className="text-xs">Actions</TableHead> 
-
-                     </TableRow> </TableHeader>
-                <TableBody>
-  {swp.activities.map(act => (
-    <TableRow key={act.id}>
-      
-      {/* Category */}
-      <TableCell className="text-xs">
-        {editingId === act.id ? (
-          <Input value={editData.category} onChange={(e) => handleChange("category", e.target.value)} />
-        ) : act.category}
-      </TableCell>
-
-      {/* Contractor */}
-      <TableCell className="text-xs">
-        {editingId === act.id ? (
-          <Input value={editData.contractorId} onChange={(e) => handleChange("contractorId", e.target.value)} />
-        ) : getContractorName(act.contractorId)}
-      </TableCell>
-
-      {/* Trade */}
-      <TableCell className="text-xs">
-        {editingId === act.id ? (
-          <Input value={editData.trade} onChange={(e) => handleChange("trade", e.target.value)} />
-        ) : act.trade}
-      </TableCell>
-
-      {/* Trade Activity */}
-      <TableCell className="text-xs">
-        {editingId === act.id ? (
-          <Input value={editData.tradeActivity} onChange={(e) => handleChange("tradeActivity", e.target.value)} />
-        ) : act.tradeActivity}
-      </TableCell>
-
-      {/* Unit */}
-      <TableCell className="text-xs">
-        {editingId === act.id ? (
-          <Input value={editData.unit} onChange={(e) => handleChange("unit", e.target.value)} />
-        ) : act.unit}
-      </TableCell>
-
-      {/* Quantity */}
-      <TableCell className="text-xs">
-        {editingId === act.id ? (
-          <Input value={editData.estimatedQuantity} onChange={(e) => handleChange("estimatedQuantity", e.target.value)} />
-        ) : act.estimatedQuantity}
-      </TableCell>
-
-      {/* Floor */}
-      <TableCell className="text-xs">
-        {editingId === act.id ? (
-          <Input value={editData.floorUnits} onChange={(e) => handleChange("floorUnits", e.target.value)} />
-        ) : act.floorUnits}
-      </TableCell>
-
-      {/* Actions */}
-      <TableCell className="text-xs space-x-2">
-        {editingId === act.id ? (
-          <>
-            <button onClick={handleSave} className="text-green-600">Save</button>
-            <button onClick={() => setEditingId(null)} className="text-gray-500">Cancel</button>
-          </>
-        ) : (
-          <>
-            <button onClick={() => handleEdit(act)} className="text-blue-600">Edit</button>
-            <button onClick={() => handleDelete(act.id)} className="text-red-600">Delete</button>
-          </>
-        )}
-      </TableCell>
-
-    </TableRow>
-  ))}
-</TableBody>
-</Table>
-</div>
+                      <TableHeader>
+                        <TableRow className="bg-muted/30">
+                          <TableHead className="text-xs">Category</TableHead>
+                          <TableHead className="text-xs">Contractor</TableHead>
+                          <TableHead className="text-xs">Trade</TableHead>
+                          <TableHead className="text-xs">Trade Activity</TableHead>
+                          <TableHead className="text-xs">Unit</TableHead>
+                          <TableHead className="text-xs">Est. Qty</TableHead>
+                          <TableHead className="text-xs">Floor</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {swp.activities.map(act => (
+                          <TableRow key={act.id}>
+                            <TableCell className="text-xs">{act.category}</TableCell>
+                            <TableCell className="text-xs">{getContractorName(act.contractorId)}</TableCell>
+                            <TableCell className="text-xs">{act.trade}</TableCell>
+                            <TableCell className="text-xs">{act.tradeActivity}</TableCell>
+                            <TableCell className="text-xs">{act.unit}</TableCell>
+                            <TableCell className="text-xs">{act.estimatedQuantity}</TableCell>
+                            <TableCell className="text-xs">{act.floorUnits}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
 
                   <div className="flex justify-end">
                     <Button size="sm" onClick={() => setShowCreateWeekly(swp.id)}><Plus className="w-4 h-4" /> Sub-Week Plan</Button>
@@ -569,7 +498,6 @@ const handleDelete = (id) => {
                 <Button size="sm" variant="outline" onClick={addActivity}><Plus className="w-3 h-3" /> Add Activity</Button>
               </div>
 
-              {/* Activities list */}
               {planActivities.length > 0 && (
                 <div className="border rounded-lg overflow-hidden">
                   <Table>
@@ -643,18 +571,15 @@ const handleDelete = (id) => {
                       <SelectContent>{TRADE_ACTIVITIES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-
-               <div>
-  <Label className="text-xs">Trade Activity</Label>
-  <Input
-    className="mt-1"
-    placeholder="Enter Trade Activity"
-    value={planActivities[editingActivityIdx].tradeActivity || ""}
-    onChange={(e) =>
-      updateActivity(editingActivityIdx, "tradeActivity", e.target.value)
-    }
-  />
-</div>
+                  <div>
+                    <Label className="text-xs">Trade Activity</Label>
+                    <Input
+                      className="mt-1"
+                      placeholder="Enter Trade Activity"
+                      value={planActivities[editingActivityIdx].tradeActivity || ""}
+                      onChange={(e) => updateActivity(editingActivityIdx, "tradeActivity", e.target.value)}
+                    />
+                  </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <Label className="text-xs">Unit</Label>
@@ -687,24 +612,75 @@ const handleDelete = (id) => {
         </DialogContent>
       </Dialog>
 
-      {/* Create Sub-Week Plan */}
+      {/* Create Sub-Week Plan — Activity-driven */}
       <Dialog open={!!showCreateWeekly} onOpenChange={() => setShowCreateWeekly(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>Create Sub-Week Plan</DialogTitle></DialogHeader>
           <div className="space-y-3 max-h-[70vh] overflow-y-auto">
-            <div><Label>Week Number</Label><Select value={wpWeek} onValueChange={setWpWeek}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent>{[1,2,3,4,5,6].map(w => <SelectItem key={w} value={String(w)}>Week {w}</SelectItem>)}</SelectContent></Select></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Category</Label><Select value={wpCategory} onValueChange={setWpCategory}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
-              <div><Label>Contractor</Label><Select value={wpContractor} onValueChange={setWpContractor}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{contractors.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
+            {/* Step 1: Select Activity */}
+            <div>
+              <Label>Select Activity</Label>
+              <Select value={wpActivityId} onValueChange={setWpActivityId}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Choose an activity" /></SelectTrigger>
+                <SelectContent>
+                  {currentSwpForWeekly?.activities.map(act => (
+                    <SelectItem key={act.id} value={act.id}>
+                      {act.trade} — {act.tradeActivity} ({getContractorName(act.contractorId)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div><Label>Trade Activity</Label><Select value={wpTrade} onValueChange={setWpTrade}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{TRADE_ACTIVITIES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent></Select></div>
+
+            {/* Show selected activity info */}
+            {selectedActivity && (
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground">Activity Details</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  <span className="text-muted-foreground">Category:</span><span>{selectedActivity.category}</span>
+                  <span className="text-muted-foreground">Contractor:</span><span>{getContractorName(selectedActivity.contractorId)}</span>
+                  <span className="text-muted-foreground">Trade:</span><span>{selectedActivity.trade}</span>
+                  <span className="text-muted-foreground">Trade Activity:</span><span>{selectedActivity.tradeActivity}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Week-specific inputs */}
+            <div>
+              <Label>Week Number</Label>
+              <Select value={wpWeek} onValueChange={setWpWeek}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>{[1,2,3,4,5,6].map(w => <SelectItem key={w} value={String(w)}>Week {w}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label>Unit</Label><Select value={wpUnit} onValueChange={setWpUnit}><SelectTrigger className="mt-1"><SelectValue placeholder="Unit" /></SelectTrigger><SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select></div>
-              <div><Label>Est. Quantity</Label><Input type="number" value={wpEstQty} onChange={e => setWpEstQty(e.target.value)} placeholder="100" className="mt-1" /></div>
-              <div><Label>Floor Units</Label><Select value={wpFloor} onValueChange={setWpFloor}><SelectTrigger className="mt-1"><SelectValue placeholder="Floor" /></SelectTrigger><SelectContent>{FLOOR_UNITS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent></Select></div>
+              <div>
+                <Label>Unit</Label>
+                <Select value={wpUnit} onValueChange={setWpUnit}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Unit" /></SelectTrigger>
+                  <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Est. Quantity</Label>
+                <Input type="number" value={wpEstQty} onChange={e => setWpEstQty(e.target.value)} placeholder="100" className="mt-1" />
+              </div>
+              <div>
+                <Label>Floor Units</Label>
+                <Select value={wpFloor} onValueChange={setWpFloor}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Floor" /></SelectTrigger>
+                  <SelectContent>{FLOOR_UNITS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
             </div>
-            <div><Label>Constraint</Label><Select value={wpConstraint} onValueChange={setWpConstraint}><SelectTrigger className="mt-1"><SelectValue placeholder="Select constraint" /></SelectTrigger><SelectContent>{CONSTRAINTS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
-            <Button onClick={() => showCreateWeekly && handleCreateWeekly(showCreateWeekly)} disabled={!wpCategory || !wpContractor || !wpTrade} className="w-full">
+            <div>
+              <Label>Constraint</Label>
+              <Select value={wpConstraint} onValueChange={setWpConstraint}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select constraint" /></SelectTrigger>
+                <SelectContent>{CONSTRAINTS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <Button onClick={() => showCreateWeekly && handleCreateWeekly(showCreateWeekly)} disabled={!wpActivityId} className="w-full">
               <Send className="w-4 h-4" /> Add & Assign to Engineer
             </Button>
           </div>
