@@ -28,7 +28,7 @@ const emptyActivity = (): PlanActivity => ({
   tradeActivity: '',
   unit: '',
   estimatedQuantity: 0,
-  floorUnits: '',
+  floorUnits: [],
 });
 
 const ProjectDetailPage = () => {
