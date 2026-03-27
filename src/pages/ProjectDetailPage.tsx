@@ -155,7 +155,7 @@ const ProjectDetailPage = () => {
     };
     addWeeklyPlan(project.id, sixWeekPlanId, wp);
     setShowCreateWeekly(null);
-    setWpActivityId(''); setWpUnit(''); setWpEstQty(''); setWpFloor(''); setWpConstraint(''); setWpWeek('1');
+    setWpActivityId(''); setWpUnit(''); setWpEstQty(''); setWpFloor([]); setWpConstraint(''); setWpWeek('1');
   };
 
   const handleCreateDaily = () => {
@@ -196,8 +196,6 @@ const ProjectDetailPage = () => {
 console.log(selectedWp)
 const allowedFloors = Array.isArray(selectedWp?.floorUnits)
   ? selectedWp.floorUnits
-  : selectedWp?.floorUnits
-  ? selectedWp.floorUnits.split(",")
   : [];
 
 const allowedUnit = selectedWp?.unit || "";
@@ -1035,7 +1033,7 @@ const maxAllowedQty = Number(selectedWp?.estimatedQuantity || 0);
   />
 
   {/* Inline error (better UX) */}
-  {dpQty > maxAllowedQty && (
+  {Number(dpQty) > maxAllowedQty && (
     <p className="text-red-500 text-xs mt-1">
       Cannot exceed {maxAllowedQty}
     </p>
