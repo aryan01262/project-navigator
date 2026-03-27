@@ -23,7 +23,7 @@ export interface PlanActivity {
   tradeActivity: string;
   unit: string;
   estimatedQuantity: number;
-  floorUnits: string;
+  floorUnits: string[];
 }
 
 export interface SixWeekPlan {
@@ -45,7 +45,7 @@ export interface DailyPlan {
   plannedQuantity: number;
   unit: string;
   constraint: string;
-  floorUnits: string;
+  floorUnits: string[];
   engineerNote?: string;
   // Supervisor fields
   completedQuantity?: number;
@@ -69,7 +69,7 @@ export interface WeeklyPlan {
   tradeActivity: string;
   unit: string;
   estimatedQuantity: number;
-  floorUnits: string;
+  floorUnits: string[];
   constraint: string;
   status: 'pending' | 'assigned' | 'forwarded' | 'logged' | 'submitted' | 'validated' | 'confirmed';
   assignedToEngineer: boolean;
