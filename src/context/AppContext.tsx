@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { Role, Project, SixWeekPlan, WeeklyPlan, DailyPlan, Contractor, PlanActivity } from '@/types/planner';
+import type { Role, Project, SixWeekPlan, WeeklyPlan, DailyPlan, Contractor, PlanActivity, Ticket } from '@/types/planner';
 import { DEFAULT_CONTRACTORS } from '@/types/planner';
 
 interface AppContextType {
@@ -8,6 +8,7 @@ interface AppContextType {
   contractors: Contractor[];
   addContractor: (contractor: Contractor) => void;
   projects: Project[];
+  tickets: Ticket[];
   createProject: (project: Project) => void;
   activeProjectId: string | null;
   setActiveProjectId: (id: string | null) => void;
@@ -43,7 +44,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : [];
   });
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+const [tickets, setTickets] = useState<Ticket[]>(() => {
+  const saved = localStorage.getItem(STORAGE_KEY + '-tickets');
+  return saved ? JSON.parse(saved) : [];
+});
 
+useEffect(() => {
+  localStorage.setItem(STORAGE_KEY + '-tickets', JSON.stringify(tickets));
+}, [tickets]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY + '-contractors', JSON.stringify(contractors)); }, [contractors]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY + '-projects', JSON.stringify(projects)); }, [projects]);
 
@@ -92,9 +100,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateDailyPlan(pid, swpId, wpId, dpId, dp => ({ ...dp, status: 'forwarded' }));
   }, [updateDailyPlan]);
 
-  const logDailyTarget = useCallback((pid: string, swpId: string, wpId: string, dpId: string, completedQuantity: number, isDone: boolean, supervisorNote: string) => {
-    updateDailyPlan(pid, swpId, wpId, dpId, dp => ({ ...dp, status: 'logged', completedQuantity, isDone, supervisorNote }));
-  }, [updateDailyPlan]);
+  // const logDailyTarget = useCallback((pid: string, swpId: string, wpId: string, dpId: string, completedQuantity: number, isDone: boolean, supervisorNote: string) => {
+  //   updateDailyPlan(pid, swpId, wpId, dpId, dp => ({ ...dp, status: 'logged', completedQuantity, isDone, supervisorNote }));
+  // }, [updateDailyPlan]);
+
+const logDailyTarget = useCallback((
+  pid: string,
+  swpId: string,
+  wpId: string,
+  dpId: string,
+  completedQuantity: number,
+  isDone: boolean,
+  supervisorNote: string
+) => {
+
+  let targetDP: DailyPlan | null = null;
+  let targetProject: Project | null = null;
+  let targetWP: WeeklyPlan | null = null;
+
+  // 🔍 Find project, weekly plan, and daily plan
+  projects.forEach(p => {
+    if (p.id === pid) {
+      targetProject = p;
+
+      p.sixWeekPlans.forEach(swp => {
+        if (swp.id === swpId) {
+
+          swp.weeklyPlans.forEach(wp => {
+            if (wp.id === wpId) {
+              targetWP = wp;
+
+              wp.dailyPlans.forEach(dp => {
+                if (dp.id === dpId) {
+                  targetDP = dp;
+                }
+              });
+            }
+          });
+
+        }
+      });
+    }
+  });
+
+  // ✅ Update daily plan
+  updateDailyPlan(pid, swpId, wpId, dpId, dp => ({
+    ...dp,
+    status: 'logged',
+    completedQuantity,
+    isDone,
+    supervisorNote
+  }));
+
+  // 🚨 SHORTFALL CHECK
+  if (
+    targetDP &&
+    targetProject &&
+    targetWP &&
+    completedQuantity < targetDP.plannedQuantity
+  ) {
+    createTicketFromShortfall(
+      targetProject,
+      swpId,
+      wpId,
+      targetDP,
+      completedQuantity,
+      supervisorNote,
+      targetWP // 👈 NEW PARAM
+    );
+  }
+
+}, [projects, updateDailyPlan]);
 
   const submitDailyTarget = useCallback((pid: string, swpId: string, wpId: string, dpId: string, constraintLog: string) => {
     updateDailyPlan(pid, swpId, wpId, dpId, dp => ({ ...dp, status: 'submitted', constraintLog, validatedByEngineer: true }));
@@ -104,12 +180,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateDailyPlan(pid, swpId, wpId, dpId, dp => ({ ...dp, status: 'confirmed', confirmedByAdmin: true }));
   }, [updateDailyPlan]);
 
+  const createTicketFromShortfall = (
+  project: Project,
+  swpId: string,
+  wpId: string,
+  dp: DailyPlan,
+  completedQuantity: number,
+  rov: string,
+  wp: WeeklyPlan
+) => {
+  const shortfall = dp.plannedQuantity - completedQuantity;
+
+  const ticket: Ticket = {
+    id: crypto.randomUUID(),
+    projectId: project.id,
+    sixWeekPlanId: swpId,
+    weeklyPlanId: wpId,
+    dailyPlanId: dp.id,
+
+    tradeName:  wp.tradeActivity,
+    taskId: dp.id,
+    date: dp.date,
+
+    targetQuantity: dp.plannedQuantity,
+    completedQuantity,
+    shortfallQuantity: shortfall,
+
+    recoveryId: `REC-${Date.now()}`,
+    contractorName: wp.contractorId,
+    unit: dp.unit,
+
+    rov,
+    assignedTo: 'engineer',
+    status: 'open'
+  };
+
+  setTickets(prev => [...prev, ticket]);
+};
+
   return (
     <AppContext.Provider value={{
       role, setRole, contractors, addContractor,
       projects, createProject, activeProjectId, setActiveProjectId,
       addSixWeekPlan, updateSixWeekPlanActivities, addWeeklyPlan, assignToEngineer,
-      addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
+      addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,tickets
     }}>
       {children}
     </AppContext.Provider>

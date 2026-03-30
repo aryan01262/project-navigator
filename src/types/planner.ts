@@ -81,6 +81,35 @@ export const CATEGORIES = [
   'Detailed Design & Approvals','Site Preparation','Structural Works', 'Structural & Exterior Systems', 'MEP Core Installation', 'Interior Finishing', 'Interior Construction', 'Exterior development', 'Fixtures & Equipment', 'Testing & Commissioning', 'Handover & Closeout', 'General/Cross-Trade Activities'
 ];
 
+export interface Ticket {
+  id: string;
+  projectId: string;
+  sixWeekPlanId: string;
+  weeklyPlanId: string;
+  dailyPlanId: string;
+
+  tradeName: string;
+  taskId: string;
+
+  date: string;
+
+  targetQuantity: number;
+  completedQuantity: number;
+  shortfallQuantity: number;
+
+  recoveryId: string;
+  contractorName: string;
+  unit: string;
+
+  rov: string; // supervisor note
+
+  // Engineer will fill these
+  recoveryDeadline?: string;
+  contractorStatement?: string;
+   assignedTo: 'engineer';
+  status: 'open' | 'in-progress' | 'closed';
+}
+
 export const TRADE_ACTIVITIES =[
   "Trade",
   "Surveying",
