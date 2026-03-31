@@ -90,10 +90,5 @@
   },
   "engines": {
     "node": "20.x"
-  },
-
-  "overrides": {
-    "@swc/core": "@swc/core-linux-x64-musl"
-   
-}
+  }
 }
