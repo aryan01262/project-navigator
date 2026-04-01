@@ -247,6 +247,10 @@ const logDailyTarget = useCallback((
   setTickets(prev => [...prev, ticket]);
 };
 
+  const updateTicket = useCallback((ticketId: string, patch: Partial<Ticket>) => {
+    setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, ...patch } : t));
+  }, []);
+
   return (
     <AppContext.Provider value={{
       role, setRole, contractors, addContractor,
