@@ -780,91 +780,76 @@ console.log(selectedActivity)
       )}
 
 {showTickets && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-    <div className="bg-white w-[90%] max-w-4xl rounded-xl shadow-lg p-4">
+  <Dialog open={showTickets} onOpenChange={setShowTickets}>
+    <DialogContent className="sm:max-w-5xl max-h-[85vh] overflow-y-auto">
+      <DialogHeader><DialogTitle>Tickets</DialogTitle></DialogHeader>
+      <Tabs value={ticketTab} onValueChange={(v) => setTicketTab(v as 'open' | 'in-progress' | 'closed')}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="open">Open ({engineerTickets.filter(t => t.status === 'open').length})</TabsTrigger>
+          <TabsTrigger value="in-progress">In Progress ({engineerTickets.filter(t => t.status === 'in-progress').length})</TabsTrigger>
+          <TabsTrigger value="closed">Closed ({engineerTickets.filter(t => t.status === 'closed').length})</TabsTrigger>
+        </TabsList>
+        {(['open', 'in-progress', 'closed'] as const).map(status => (
+          <TabsContent key={status} value={status}>
+            {engineerTickets.filter(t => t.status === status).length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No {status} tickets.</p>
+            ) : (
+              <div className="space-y-3">
+                {engineerTickets.filter(t => t.status === status).map(ticket => (
+                  <Card key={ticket.id}>
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-sm font-semibold">{ticket.tradeName} · <span className="font-mono text-xs">{ticket.recoveryId}</span></p>
+                          <p className="text-xs text-muted-foreground">Date: {ticket.date} · Contractor: {getContractorName(ticket.contractorName)}</p>
+                        </div>
+                        <StatusBadge status={ticket.status} />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div><span className="text-muted-foreground">Target:</span> {ticket.targetQuantity} {ticket.unit}</div>
+                        <div><span className="text-muted-foreground">Done:</span> {ticket.completedQuantity} {ticket.unit}</div>
+                        <div className="text-destructive font-semibold">Shortfall: {ticket.shortfallQuantity} {ticket.unit}</div>
+                      </div>
+                      <div className="text-xs"><span className="font-medium">ROV:</span> {ticket.rov || '—'}</div>
 
-      {/* Header */}
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold">Assigned Tickets</h2>
-        <Button size="sm" variant="ghost" onClick={() => setShowTickets(false)}>
-          ✕
-        </Button>
-      </div>
+                      {status !== 'closed' && (
+                        <div className="grid grid-cols-2 gap-3 pt-2 border-t">
+                          <div>
+                            <Label className="text-xs">Recovery Deadline</Label>
+                            <Input type="date" value={ticket.recoveryDeadline || ''} onChange={e => updateTicket(ticket.id, { recoveryDeadline: e.target.value })} className="mt-1" />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Contractor Statement</Label>
+                            <Textarea value={ticket.contractorStatement || ''} onChange={e => updateTicket(ticket.id, { contractorStatement: e.target.value })} placeholder="Enter contractor notes..." className="mt-1 text-xs" rows={2} />
+                          </div>
+                        </div>
+                      )}
 
-      {/* Content */}
-      {engineerTickets.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No tickets assigned.</p>
-      ) : (
-        <div className="space-y-3 max-h-[450px] overflow-y-auto">
-          {engineerTickets.map(ticket => (
-            <div
-              key={ticket.id}
-              className="border rounded-lg p-3 bg-card shadow-sm space-y-2"
-            >
-
-              {/* Top Info */}
-              <div className="flex justify-between items-center">
-                <div className="text-sm font-medium">
-                  {ticket.tradeName} · {ticket.taskId}
-                </div>
-                <span className="text-xs text-red-500 font-semibold">
-                  Shortfall: {ticket.shortfallQuantity} {ticket.unit}
-                </span>
+                      <div className="flex justify-between items-center pt-2">
+                        {status === 'open' && (
+                          <Button size="sm" variant="outline" onClick={() => updateTicket(ticket.id, { status: 'in-progress' })}>
+                            Mark In Progress
+                          </Button>
+                        )}
+                        {status === 'in-progress' && (
+                          <Button size="sm" onClick={() => updateTicket(ticket.id, { status: 'closed' })}>
+                            <Check className="w-3 h-3" /> Submit & Close
+                          </Button>
+                        )}
+                        {status === 'closed' && (
+                          <span className="text-xs text-muted-foreground">Resolved — sent to Admin</span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-
-              {/* Meta Info */}
-              <div className="text-xs text-muted-foreground">
-                Date: {ticket.date} · Target: {ticket.targetQuantity} · Done: {ticket.completedQuantity}
-              </div>
-
-              <div className="text-xs">
-                <strong>ROV:</strong> {ticket.rov || '—'}
-              </div>
-
-              {/* Engineer Inputs */}
-              <div className="grid grid-cols-2 gap-2 mt-2">
-
-                {/* Deadline */}
-                <Input
-                  type="date"
-                  value={ticket.recoveryDeadline || ''}
-                  onChange={(e) =>
-                    updateTicket(ticket.id, { recoveryDeadline: e.target.value, status: 'in-progress' })
-                  }
-                />
-
-                {/* Contractor Notes */}
-                <Input
-                  placeholder="Contractor Statement"
-                  value={ticket.contractorStatement || ''}
-                  onChange={(e) =>
-                    updateTicket(ticket.id, { contractorStatement: e.target.value, status: 'in-progress' })
-                  }
-                />
-              </div>
-
-              {/* Footer */}
-              <div className="flex justify-between items-center mt-2">
-                <span className="text-xs text-muted-foreground">
-                  {ticket.status}
-                </span>
-
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    updateTicket(ticket.id, { status: 'closed' })
-                  }
-                >
-                  Mark Resolved
-                </Button>
-              </div>
-
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  </div>
+            )}
+          </TabsContent>
+        ))}
+      </Tabs>
+    </DialogContent>
+  </Dialog>
 )}
       {/* =================== DIALOGS =================== */}
 
