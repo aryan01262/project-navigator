@@ -23,7 +23,7 @@ export interface PlanActivity {
   tradeActivity: string;
   unit: string;
   estimatedQuantity: number;
-  floorUnits: string;
+  floorUnits: string[];
   remainingQuantity: number;
 }
 
