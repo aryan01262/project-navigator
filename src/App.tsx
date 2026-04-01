@@ -11,6 +11,7 @@ import ContractorsPage from "./pages/ContractorsPage";
 import ReportsPage from "./pages/ReportsPage";
 import NotFound from "./pages/NotFound";
 
+
 const queryClient = new QueryClient();
 
 const App = () => (
