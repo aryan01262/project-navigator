@@ -60,7 +60,7 @@ const ProjectDetailPage = () => {
   const [wpActivityId, setWpActivityId] = useState('');
   const [wpUnit, setWpUnit] = useState('');
   const [wpEstQty, setWpEstQty] = useState('');
-  const [wpFloor, setWpFloor] = useState([]);
+  const [wpFloor, setWpFloor] = useState<string[]>([]);
   const [wpWeek, setWpWeek] = useState('1');
   const [wpConstraint, setWpConstraint] = useState('');
 
