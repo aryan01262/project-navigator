@@ -37,7 +37,8 @@ const ProjectDetailPage = () => {
   const {
     projects, contractors, role,
     addSixWeekPlan, updateSixWeekPlanActivities, addWeeklyPlan, assignToEngineer,
-    addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget, updateActivity2, updateWeeklyPlanField
+    addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget, updateActivity2, updateWeeklyPlanField,
+    tickets, updateTicket
   } = useAppContext();
 
   const project = projects.find(p => p.id === projectId);
