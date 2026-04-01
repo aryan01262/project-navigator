@@ -303,11 +303,9 @@ const handleCreateDaily = () => {
       wp.swpId === showCreateDaily?.swpId
   );
   console.log(selectedWp)
-  const allowedFloors = Array.isArray(selectedWp?.floorUnits)
+  const allowedFloors: string[] = Array.isArray(selectedWp?.floorUnits)
     ? selectedWp.floorUnits
-    : selectedWp?.floorUnits
-      ? selectedWp.floorUnits.split(",")
-      : [];
+    : [];
 
   const allowedUnit = selectedWp?.unit || "";
 
