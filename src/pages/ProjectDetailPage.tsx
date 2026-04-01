@@ -69,7 +69,7 @@ const ProjectDetailPage = () => {
   const [dpDay, setDpDay] = useState('1');
   const [dpQty, setDpQty] = useState('');
   const [dpConstraint, setDpConstraint] = useState('');
-  const [dpFloor, setDpFloor] = useState([]);
+  const [dpFloor, setDpFloor] = useState<string[]>([]);
   const [dpNote, setDpNote] = useState('');
   const [dpUnits, setDpUnits] = useState('');
   // Supervisor log
