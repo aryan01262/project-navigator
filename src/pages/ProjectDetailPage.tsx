@@ -29,6 +29,7 @@ const emptyActivity = (): PlanActivity => ({
   unit: '',
   estimatedQuantity: 0,
   floorUnits: [] as string[],
+  remainingQuantity: 0,
 });
 
 const ProjectDetailPage = () => {
