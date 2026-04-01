@@ -601,6 +601,46 @@ console.log(selectedActivity)
               )}
             </Card>
           ))}
+          {/* Admin Tickets Table */}
+          {adminTickets.length > 0 && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="text-base">Recovery Tickets ({adminTickets.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="border rounded-lg overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="text-xs">Ticket ID</TableHead>
+                        <TableHead className="text-xs">Recovery ID</TableHead>
+                        <TableHead className="text-xs">Contractor</TableHead>
+                        <TableHead className="text-xs">Trade</TableHead>
+                        <TableHead className="text-xs">Shortfall</TableHead>
+                        <TableHead className="text-xs">Contractor Notes</TableHead>
+                        <TableHead className="text-xs">Deadline</TableHead>
+                        <TableHead className="text-xs">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {adminTickets.map(ticket => (
+                        <TableRow key={ticket.id}>
+                          <TableCell className="text-xs font-mono">{ticket.id.slice(0, 8)}</TableCell>
+                          <TableCell className="text-xs font-mono">{ticket.recoveryId}</TableCell>
+                          <TableCell className="text-xs">{getContractorName(ticket.contractorName)}</TableCell>
+                          <TableCell className="text-xs">{ticket.tradeName}</TableCell>
+                          <TableCell className="text-xs text-destructive font-semibold">{ticket.shortfallQuantity} {ticket.unit}</TableCell>
+                          <TableCell className="text-xs max-w-[200px] truncate">{ticket.contractorStatement || '—'}</TableCell>
+                          <TableCell className="text-xs">{ticket.recoveryDeadline || '—'}</TableCell>
+                          <TableCell><StatusBadge status={ticket.status} /></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
