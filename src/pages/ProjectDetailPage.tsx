@@ -81,11 +81,12 @@ const ProjectDetailPage = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<PlanActivity | null>(null);
 const [showTickets, setShowTickets] = useState(false);
+const [ticketTab, setTicketTab] = useState<'open' | 'in-progress' | 'closed'>('open');
   // Engineer submit
   const [submitConstraint, setSubmitConstraint] = useState('');
-const { tickets } = useAppContext();
 
 const engineerTickets = tickets.filter(t => t.assignedTo === 'engineer');
+const adminTickets = tickets;
   const planEndDate = useMemo(() => {
     if (!planStartDate) return null;
     const sixWeeksOut = addDays(planStartDate, 41);
