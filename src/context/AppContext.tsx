@@ -256,7 +256,7 @@ const logDailyTarget = useCallback((
       role, setRole, contractors, addContractor,
       projects, createProject, activeProjectId, setActiveProjectId,
       addSixWeekPlan, updateSixWeekPlanActivities, addWeeklyPlan, assignToEngineer,
-      addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,tickets, updateActivity2,updateWeeklyPlanField
+      addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,tickets, updateActivity2,updateWeeklyPlanField, updateTicket
     }}>
       {children}
     </AppContext.Provider>

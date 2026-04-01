@@ -71,7 +71,7 @@ export interface WeeklyPlan {
   tradeActivity: string;
   unit: string;
   estimatedQuantity: number;
-  floorUnits: [][];
+  floorUnits: string[];
   constraint: string;
   status: 'pending' | 'assigned' | 'forwarded' | 'logged' | 'submitted' | 'validated' | 'confirmed';
   assignedToEngineer: boolean;
