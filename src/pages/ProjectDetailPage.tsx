@@ -134,9 +134,14 @@ const adminTickets = tickets;
 
   const handleCreatePlan = () => {
     if (!planName || !planStartDate || !planEndDate || planActivities.length === 0) return;
-    const validActivities = planActivities
-      .filter(a => a.category && a.contractorId && a.tradeActivity)
-      .map(a => ({ ...a, remainingQuantity: a.remainingQuantity ?? a.estimatedQuantity }));
+    
+      const validActivities = planActivities
+  .filter(a => a.category && a.contractorId && a.tradeActivity)
+  .map(a => ({
+    ...a,
+    remainingQuantity: a.estimatedQuantity
+  }));
+      console.log(validActivities)
     if (validActivities.length === 0) return;
     const plan: SixWeekPlan = {
       id: crypto.randomUUID(), projectId: project.id, name: planName,
