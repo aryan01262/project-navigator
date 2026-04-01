@@ -1,0 +1,7 @@
+{
+  "installCommand": "npm install --ignore-scripts && npm rebuild esbuild",
+  "buildCommand": "npm run build",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
+  ]
+}
