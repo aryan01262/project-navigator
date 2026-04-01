@@ -22,7 +22,8 @@ interface AppContextType {
   submitDailyTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string, constraintLog: string) => void;
   confirmDailyTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string) => void;
    updateActivity2: (projectId: string, sixWeekPlanId: string, activityId: string, patch: Partial<PlanActivity>) => void; // ✅ ADD
-   updateWeeklyPlanField: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, patch: Partial<WeeklyPlan>) => void;
+    updateWeeklyPlanField: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, patch: Partial<WeeklyPlan>) => void;
+    updateTicket: (ticketId: string, patch: Partial<Ticket>) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -246,12 +247,16 @@ const logDailyTarget = useCallback((
   setTickets(prev => [...prev, ticket]);
 };
 
+  const updateTicket = useCallback((ticketId: string, patch: Partial<Ticket>) => {
+    setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, ...patch } : t));
+  }, []);
+
   return (
     <AppContext.Provider value={{
       role, setRole, contractors, addContractor,
       projects, createProject, activeProjectId, setActiveProjectId,
       addSixWeekPlan, updateSixWeekPlanActivities, addWeeklyPlan, assignToEngineer,
-      addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,tickets, updateActivity2,updateWeeklyPlanField
+      addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,tickets, updateActivity2,updateWeeklyPlanField, updateTicket
     }}>
       {children}
     </AppContext.Provider>
