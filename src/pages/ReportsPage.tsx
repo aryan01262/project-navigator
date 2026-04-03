@@ -209,6 +209,31 @@ const ReportsPage = () => {
         </Card>
       </div>
 
+      {/* Constraint Category Pie Chart */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-destructive" /> Constraint Category Distribution</CardTitle>
+          <p className="text-sm text-muted-foreground">Breakdown of constraints by category across the project</p>
+        </CardHeader>
+        <CardContent>
+          {constraintCatPieData.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No constraints logged yet.</p>
+          ) : (
+            <div className="h-[320px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={constraintCatPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine={false}>
+                    {constraintCatPieData.map((_, i) => <Cell key={i} fill={COLORS[(i + 5) % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* PPC Bar Chart with Daily/Weekly Tabs */}
       <Card className="mb-6">
         <CardHeader>
