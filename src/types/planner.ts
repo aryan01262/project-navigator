@@ -179,6 +179,44 @@ export const CONSTRAINTS = [
   "Unforeseen Site Conditions (Underground services, structures, leakage from existing services, etc.)"
 ];
 
+export const CONSTRAINTS_CATEGORY = [
+  'Material','MAN', 'MACHINE', 'METHOD', 'ENVIORANMENT/SITE'
+]
+
+const constraintCategories = [
+  { category: "MATERIAL", reason: "Material arrived late" },
+  { category: "MATERIAL", reason: "Material shortage" },
+  { category: "MATERIAL", reason: "Faulty material / wrong specifications" },
+  { category: "MATERIAL", reason: "Material unavailable due to vendor / transporter" },
+
+  { category: "MAN (LABOUR)", reason: "Labour shortage" },
+  { category: "MAN (LABOUR)", reason: "Insufficient skill of workmen" },
+  { category: "MAN (LABOUR)", reason: "Low productivity" },
+  { category: "MAN (LABOUR)", reason: "Execution failures" },
+
+  { category: "MACHINE", reason: "Equipment breakdown" },
+  { category: "MACHINE", reason: "Low output of equipment" },
+
+  { category: "METHOD", reason: "Lack of sufficient drawings / specifications" },
+  { category: "METHOD", reason: "Design error found while executing" },
+  { category: "METHOD", reason: "Delay in decisions by client / consultant / authorities" },
+  { category: "METHOD", reason: "Lack of space planning" },
+  { category: "METHOD", reason: "Failure in coordination of shared resources" },
+  { category: "METHOD", reason: "Failure in coordination between trades" },
+  { category: "METHOD", reason: "Inspection / permission required" },
+  { category: "METHOD", reason: "Change in priority of work" },
+  { category: "METHOD", reason: "Excessive work planned" },
+  { category: "METHOD", reason: "Wrong sequencing of works" },
+  { category: "METHOD", reason: "Consequential delay due to WIP / backlog" },
+  { category: "METHOD", reason: "Pre-requisite work not completed" },
+
+  { category: "ENVIRONMENT / SITE", reason: "Accidents" },
+  { category: "ENVIRONMENT / SITE", reason: "Weather conditions" },
+  { category: "ENVIRONMENT / SITE", reason: "Visits (management / client / officials)" },
+  { category: "ENVIRONMENT / SITE", reason: "Power breakdown" },
+  { category: "ENVIRONMENT / SITE", reason: "Unforeseen site conditions" },
+  { category: "ENVIRONMENT / SITE", reason: "On-site conditions" }
+];
 export const DEFAULT_CONTRACTORS: Contractor[] = [
   { id: '1', name: 'Adhiraj Construction', specialization: 'Structural' },
   { id: '2', name: 'Skyline Builders', specialization: 'MEP' },
