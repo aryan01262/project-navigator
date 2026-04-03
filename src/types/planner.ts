@@ -183,7 +183,7 @@ export const CONSTRAINTS_CATEGORY = [
   'Material','MAN', 'MACHINE', 'METHOD', 'ENVIORANMENT/SITE'
 ]
 
-const constraintCategories = [
+export const constraintCategories = [
   { category: "MATERIAL", reason: "Material arrived late" },
   { category: "MATERIAL", reason: "Material shortage" },
   { category: "MATERIAL", reason: "Faulty material / wrong specifications" },
