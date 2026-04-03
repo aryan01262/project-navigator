@@ -119,6 +119,18 @@ const ReportsPage = () => {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
+  // --- PIE CHART: Constraint Category distribution ---
+  const constraintCatCounts: Record<string, number> = {};
+  allDailyPlans.forEach(dp => {
+    const reason = dp.constraint || dp.constraintLog;
+    if (reason && reason !== 'No Constraint') {
+      const match = constraintCategories.find(cc => cc.reason.toLowerCase() === reason.toLowerCase());
+      const cat = match ? match.category : 'OTHER';
+      constraintCatCounts[cat] = (constraintCatCounts[cat] || 0) + 1;
+    }
+  });
+  const constraintCatPieData = Object.entries(constraintCatCounts).map(([name, value]) => ({ name, value }));
+
   const activePpcData = ppcTab === 'daily' ? dailyPpcData : weeklyPpcData;
   const avgPPC = activePpcData.filter(d => d.planned > 0).length > 0
     ? Math.round(activePpcData.filter(d => d.planned > 0).reduce((s, d) => s + d.ppc, 0) / activePpcData.filter(d => d.planned > 0).length)
