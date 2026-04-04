@@ -141,7 +141,16 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
   });
   const constraintCatPieData = Object.entries(constraintCatCounts).map(([name, value]) => ({ name, value }));
 
-  // --- OUTPUT PER DAY: actual quantity per trade per day, grouped by week ---
+  // --- PIE CHART: ROV Frequency ---
+  const rovCounts: Record<string, number> = {};
+  allDailyPlans.forEach(dp => {
+    const rov = dp.rov;
+    if (rov && rov.trim()) {
+      rovCounts[rov] = (rovCounts[rov] || 0) + 1;
+    }
+  });
+  const rovPieData = Object.entries(rovCounts).map(([name, value]) => ({ name, value }));
+
   const trades = [...new Set(allDailyPlans.map(dp => dp.tradeActivity).filter(Boolean))];
   const outputWeeks = [...new Set(allDailyPlans.map(dp => dp.weekNumber))].sort((a, b) => a - b);
 
@@ -497,7 +506,7 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
       </Card>
 
       {/* Top Constraints */}
-      <Card>
+      <Card className="mb-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-destructive" /> Top Constraint Log</CardTitle>
         </CardHeader>
@@ -516,6 +525,45 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
                 </div>
               ))}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ROV Frequency */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><PieChartIcon className="w-5 h-5 text-primary" /> ROV (Reason of Variance) Frequency</CardTitle>
+          <p className="text-sm text-muted-foreground">Distribution of reasons logged by supervisors when actual output differs from planned</p>
+        </CardHeader>
+        <CardContent>
+          {rovPieData.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No ROV data logged yet.</p>
+          ) : (
+            <>
+              <div className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={rovPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine={false}>
+                      {rovPieData.map((_, i) => <Cell key={i} fill={COLORS[(i + 2) % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-4 space-y-2">
+                <h4 className="text-sm font-semibold text-foreground">ROV Breakdown</h4>
+                {rovPieData.sort((a, b) => b.value - a.value).map((item, i) => (
+                  <div key={item.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border">
+                    <div className="flex items-center gap-3">
+                      <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: COLORS[(i + 2) % COLORS.length] }} />
+                      <span className="text-sm font-medium text-foreground">{item.name}</span>
+                    </div>
+                    <span className="text-sm font-mono text-primary font-bold">{item.value}×</span>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
