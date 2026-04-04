@@ -77,7 +77,10 @@ const ReportsPage = () => {
     const dayPlans = allDailyPlans.filter(dp => dp.dayNumber === dayNum && dp.completedQuantity !== undefined);
     const totalPlanned = dayPlans.reduce((s, dp) => s + dp.plannedQuantity, 0);
     const totalActual = dayPlans.reduce((s, dp) => s + (dp.completedQuantity || 0), 0);
-    const ppc = totalPlanned > 0 ? Math.round((totalActual / totalPlanned) * 100) : 0;
+    console.log(totalActual, totalPlanned, dayPlans)
+    const ppc = totalPlanned > 0 
+  ? Math.min(100, Math.round((totalActual / totalPlanned) * 100)) 
+  : 0;
     return { name, ppc, planned: totalPlanned, actual: totalActual };
   });
 
@@ -87,7 +90,9 @@ const ReportsPage = () => {
     const weekPlans = allDailyPlans.filter(dp => dp.weekNumber === wn && dp.completedQuantity !== undefined);
     const totalPlanned = weekPlans.reduce((s, dp) => s + dp.plannedQuantity, 0);
     const totalActual = weekPlans.reduce((s, dp) => s + (dp.completedQuantity || 0), 0);
-    const ppc = totalPlanned > 0 ? Math.round((totalActual / totalPlanned) * 100) : 0;
+    const ppc = totalPlanned > 0
+  ? Math.min(100, Math.round((totalActual / totalPlanned) * 100))
+  : 0;
     return { name: `Week ${wn}`, ppc, planned: totalPlanned, actual: totalActual };
   });
 
@@ -100,13 +105,17 @@ const ReportsPage = () => {
       contractorPerf[dp.contractorId].actual += (dp.completedQuantity || 0);
     }
   });
-  const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => ({
-    name: contractors.find(c => c.id === cId)?.name || cId,
-    ppc: data.planned > 0 ? Math.round((data.actual / data.planned) * 100) : 0,
-    planned: data.planned,
-    actual: data.actual,
-  })).sort((a, b) => b.ppc - a.ppc);
+const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
+  const planned = data.planned;
+  const actual = data.actual;
 
+  return {
+    name: contractors.find(c => c.id === cId)?.name || cId,
+    planned,
+    actual,
+    remaining: Math.max(planned - actual, 0), // 🔥 key part
+  };
+});
   // Top constraints
   const constraintCounts: Record<string, number> = {};
   allDailyPlans.forEach(dp => {
@@ -252,9 +261,27 @@ const ReportsPage = () => {
                   <BarChart data={dailyPpcData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                     <XAxis dataKey="name" className="text-xs fill-muted-foreground" />
-                    <YAxis domain={[0, 120]} tickFormatter={v => `${v}%`} className="text-xs fill-muted-foreground" />
-                    <Tooltip formatter={(value: number, name: string) => name === 'ppc' ? [`${value}%`, 'PPC'] : [value, name]}
-                      contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} className="text-xs fill-muted-foreground" />
+                   <Tooltip
+  formatter={(value: number, name: string, props: any) => {
+    if (name === 'ppc') {
+      return [`${value}%`, 'PPC'];
+    }
+    return [value, name];
+  }}
+  labelFormatter={(label, payload) => {
+    if (payload && payload.length) {
+      const data = payload[0].payload;
+      return `${label} | Planned: ${data.planned}, Actual: ${data.actual}`;
+    }
+    return label;
+  }}
+  contentStyle={{
+    backgroundColor: 'hsl(var(--card))',
+    border: '1px solid hsl(var(--border))',
+    borderRadius: '8px'
+  }}
+/>
                     <Bar dataKey="ppc" radius={[6, 6, 0, 0]} maxBarSize={60}>
                       {dailyPpcData.map((entry, index) => (
                         <Cell key={index} fill={entry.ppc >= 80 ? 'hsl(var(--primary))' : entry.ppc >= 50 ? 'hsl(var(--accent))' : 'hsl(var(--destructive))'} />
@@ -273,9 +300,23 @@ const ReportsPage = () => {
                     <BarChart data={weeklyPpcData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                       <XAxis dataKey="name" className="text-xs fill-muted-foreground" />
-                      <YAxis domain={[0, 120]} tickFormatter={v => `${v}%`} className="text-xs fill-muted-foreground" />
-                      <Tooltip formatter={(value: number, name: string) => name === 'ppc' ? [`${value}%`, 'PPC'] : [value, name]}
-                        contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                      <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} className="text-xs fill-muted-foreground" />
+                      <Tooltip
+  content={({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="p-2 rounded-md border bg-card text-sm">
+          <p className="font-medium">{label}</p>
+          <p>PPC: {data.ppc}%</p>
+          <p>Planned: {data.planned}</p>
+          <p>Actual: {data.actual}</p>
+        </div>
+      );
+    }
+    return null;
+  }}
+/>
                       <Bar dataKey="ppc" radius={[6, 6, 0, 0]} maxBarSize={60}>
                         {weeklyPpcData.map((entry, index) => (
                           <Cell key={index} fill={entry.ppc >= 80 ? 'hsl(var(--primary))' : entry.ppc >= 50 ? 'hsl(var(--accent))' : 'hsl(var(--destructive))'} />
@@ -299,28 +340,103 @@ const ReportsPage = () => {
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Contractor Performance</CardTitle>
-          <p className="text-sm text-muted-foreground">PPC = (Actual Qty / Planned Qty) × 100%</p>
         </CardHeader>
         <CardContent>
           {contractorPerfData.length === 0 ? (
             <p className="text-sm text-muted-foreground">No contractor data available yet.</p>
           ) : (
-            <div style={{ height: Math.max(200, contractorPerfData.length * 50) }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={contractorPerfData} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis type="number" domain={[0, 120]} tickFormatter={v => `${v}%`} className="text-xs fill-muted-foreground" />
-                  <YAxis type="category" dataKey="name" width={110} className="text-xs fill-muted-foreground" />
-                  <Tooltip formatter={(value: number) => [`${value}%`, 'PPC']}
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
-                  <Bar dataKey="ppc" radius={[0, 6, 6, 0]} maxBarSize={30}>
-                    {contractorPerfData.map((entry, index) => (
-                      <Cell key={index} fill={entry.ppc >= 80 ? 'hsl(var(--primary))' : entry.ppc >= 50 ? 'hsl(var(--accent))' : 'hsl(var(--destructive))'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+           <div style={{ height: Math.max(180, contractorPerfData.length * 40) }}>
+ <ResponsiveContainer width="100%" height="100%">
+  <BarChart
+    data={contractorPerfData}
+    layout="vertical"
+    margin={{ top: 10, right: 30, left: 140, bottom: 10 }}
+    barCategoryGap={12}
+  >
+    {/* Grid (clean + minimal) */}
+    <CartesianGrid
+      strokeDasharray="3 6"
+      stroke="hsl(var(--border) / 0.3)"
+      vertical={false}
+    />
+
+    {/* X Axis */}
+    <XAxis
+      type="number"
+      axisLine={{ stroke: "hsl(var(--border) / 0.6)", strokeWidth: 1 }}
+      tickLine={false}
+      tick={{
+        fontSize: 11,
+        fill: "hsl(var(--muted-foreground))",
+      }}
+    />
+
+    {/* Y Axis */}
+    <YAxis
+      type="category"
+      dataKey="name"
+      width={170}
+      axisLine={{ stroke: "hsl(var(--border) / 0.6)", strokeWidth: 1 }}
+      tickLine={false}
+      tick={{
+        fontSize: 12,
+        fill: "hsl(var(--foreground))",
+        fontWeight: 500,
+      }}
+    />
+
+    {/* Tooltip (modern glass look) */}
+    <Tooltip
+      cursor={{ fill: "rgba(255,255,255,0.04)" }}
+      content={({ active, payload }) => {
+        if (active && payload && payload.length) {
+          const data = payload[0].payload;
+          return (
+            <div className="bg-white/90 backdrop-blur-lg shadow-xl border border-gray-200 rounded-xl px-4 py-3 text-xs">
+              <p className="font-semibold text-gray-900 mb-2">
+                {data.name}
+              </p>
+
+              <div className="flex justify-between gap-8 text-gray-600">
+                <span>Planned</span>
+                <span className="font-semibold text-gray-900">
+                  {data.planned}
+                </span>
+              </div>
+
+              <div className="flex justify-between gap-8 text-gray-600">
+                <span>Actual</span>
+                <span className="font-semibold text-primary">
+                  {data.actual}
+                </span>
+              </div>
             </div>
+          );
+        }
+        return null;
+      }}
+    />
+
+    {/* Actual */}
+    <Bar
+      dataKey="actual"
+      stackId="a"
+      fill="hsl(var(--primary))"
+      radius={[10, 0, 0, 10]}
+      maxBarSize={14}
+    />
+
+    {/* Remaining */}
+    <Bar
+      dataKey="remaining"
+      stackId="a"
+      fill="hsl(var(--muted))"
+      radius={[0, 10, 10, 0]}
+      maxBarSize={14}
+    />
+  </BarChart>
+</ResponsiveContainer>
+</div>
           )}
         </CardContent>
       </Card>
