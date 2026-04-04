@@ -143,7 +143,6 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
 
   // --- OUTPUT PER DAY: actual quantity per trade per day, grouped by week ---
   const trades = [...new Set(allDailyPlans.map(dp => dp.tradeActivity).filter(Boolean))];
-  const trades = [...new Set(allDailyPlans.map(dp => dp.tradeActivity).filter(Boolean))];
   const outputWeeks = [...new Set(allDailyPlans.map(dp => dp.weekNumber))].sort((a, b) => a - b);
 
   const filteredDailyPlans = outputWeekTab === 'all'
