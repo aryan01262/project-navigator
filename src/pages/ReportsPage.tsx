@@ -141,7 +141,16 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
   });
   const constraintCatPieData = Object.entries(constraintCatCounts).map(([name, value]) => ({ name, value }));
 
-  // --- OUTPUT PER DAY: actual quantity per trade per day, grouped by week ---
+  // --- PIE CHART: ROV Frequency ---
+  const rovCounts: Record<string, number> = {};
+  allDailyPlans.forEach(dp => {
+    const rov = dp.rov;
+    if (rov && rov.trim()) {
+      rovCounts[rov] = (rovCounts[rov] || 0) + 1;
+    }
+  });
+  const rovPieData = Object.entries(rovCounts).map(([name, value]) => ({ name, value }));
+
   const trades = [...new Set(allDailyPlans.map(dp => dp.tradeActivity).filter(Boolean))];
   const outputWeeks = [...new Set(allDailyPlans.map(dp => dp.weekNumber))].sort((a, b) => a - b);
 
