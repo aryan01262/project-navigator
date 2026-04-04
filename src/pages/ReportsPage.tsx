@@ -29,7 +29,7 @@ const COLORS = [
 const ReportsPage = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const { projects, role, contractors } = useAppContext();
+  const { projects, role, contractors, tickets } = useAppContext();
   const [ppcTab, setPpcTab] = useState('daily');
   const [outputWeekTab, setOutputWeekTab] = useState<number | 'all'>('all');
 
@@ -150,6 +150,21 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
     }
   });
   const rovPieData = Object.entries(rovCounts).map(([name, value]) => ({ name, value }));
+
+  // --- PIE CHART: Constraint Status (from tickets) ---
+  const projectTickets = tickets.filter(t => t.projectId === projectId);
+  const statusCounts: Record<string, number> = {};
+  projectTickets.forEach(t => {
+    const label = t.status === 'open' ? 'Open' : t.status === 'in-progress' ? 'In Progress' : 'Closed';
+    statusCounts[label] = (statusCounts[label] || 0) + 1;
+  });
+  const constraintStatusPieData = Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
+
+  const STATUS_COLORS: Record<string, string> = {
+    'Open': 'hsl(var(--destructive))',
+    'In Progress': 'hsl(var(--accent))',
+    'Closed': 'hsl(var(--primary))',
+  };
 
   const trades = [...new Set(allDailyPlans.map(dp => dp.tradeActivity).filter(Boolean))];
   const outputWeeks = [...new Set(allDailyPlans.map(dp => dp.weekNumber))].sort((a, b) => a - b);
@@ -560,6 +575,50 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
                       <span className="text-sm font-medium text-foreground">{item.name}</span>
                     </div>
                     <span className="text-sm font-mono text-primary font-bold">{item.value}×</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Constraint Status from Tickets */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><PieChartIcon className="w-5 h-5 text-accent" /> Constraint Status (Tickets)</CardTitle>
+          <p className="text-sm text-muted-foreground">Status distribution of shortfall tickets and their associated constraints</p>
+        </CardHeader>
+        <CardContent>
+          {constraintStatusPieData.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No tickets raised yet.</p>
+          ) : (
+            <>
+              <div className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={constraintStatusPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine={false}>
+                      {constraintStatusPieData.map((entry, i) => <Cell key={i} fill={STATUS_COLORS[entry.name] || COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-4 space-y-2">
+                <h4 className="text-sm font-semibold text-foreground">Tickets by Constraint & Status</h4>
+                {projectTickets.map((ticket, i) => (
+                  <div key={ticket.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border">
+                    <div className="flex items-center gap-3">
+                      <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: STATUS_COLORS[ticket.status === 'open' ? 'Open' : ticket.status === 'in-progress' ? 'In Progress' : 'Closed'] }} />
+                      <div>
+                        <span className="text-sm font-medium text-foreground">{ticket.constraint || 'No constraint'}</span>
+                        <span className="text-xs text-muted-foreground ml-2">({ticket.tradeName})</span>
+                      </div>
+                    </div>
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${ticket.status === 'open' ? 'bg-destructive/10 text-destructive' : ticket.status === 'in-progress' ? 'bg-accent/10 text-accent' : 'bg-primary/10 text-primary'}`}>
+                      {ticket.status === 'open' ? 'Open' : ticket.status === 'in-progress' ? 'In Progress' : 'Closed'}
+                    </span>
                   </div>
                 ))}
               </div>
