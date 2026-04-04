@@ -48,6 +48,7 @@ export interface DailyPlan {
   constraint: string;
   floorUnits: string[];
   engineerNote?: string;
+  rov?: string;
   // Supervisor fields
   completedQuantity?: number;
   remainingQuantity? : number;
@@ -94,7 +95,8 @@ export interface Ticket {
 
   tradeName: string;
   taskId: string;
-
+  constraint: string;
+  rovComment : string;
   date: string;
 
   targetQuantity: number;

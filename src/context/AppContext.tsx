@@ -18,7 +18,7 @@ interface AppContextType {
   assignToEngineer: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string) => void;
   addDailyPlan: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, daily: DailyPlan) => void;
   forwardDailyToSupervisor: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string) => void;
-  logDailyTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string, completedQty: number, isDone: boolean, note: string) => void;
+  logDailyTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string, completedQty: number, isDone: boolean, rov: string) => void;
   submitDailyTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string, constraintLog: string) => void;
   confirmDailyTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string) => void;
    updateActivity2: (projectId: string, sixWeekPlanId: string, activityId: string, patch: Partial<PlanActivity>) => void; // ✅ ADD
@@ -140,7 +140,7 @@ const logDailyTarget = useCallback((
   dpId: string,
   completedQuantity: number,
   isDone: boolean,
-  supervisorNote: string
+  rov: string
 ) => {
 
   let targetDP: DailyPlan | null = null;
@@ -178,7 +178,7 @@ const logDailyTarget = useCallback((
     status: 'logged',
     completedQuantity,
     isDone,
-    supervisorNote
+    rov
   }));
 
   // 🚨 SHORTFALL CHECK
@@ -194,7 +194,7 @@ const logDailyTarget = useCallback((
       wpId,
       targetDP,
       completedQuantity,
-      supervisorNote,
+      rov,
       targetWP // 👈 NEW PARAM
     );
   }
@@ -230,6 +230,8 @@ const logDailyTarget = useCallback((
     tradeName:  wp.tradeActivity,
     taskId: dp.id,
     date: dp.date,
+    constraint: dp.constraint,
+    rovComment : dp.rov,
 
     targetQuantity: dp.plannedQuantity,
     completedQuantity,

@@ -227,20 +227,7 @@ updateActivity2(project.id, sixWeekPlanId, wpActivityId, {
   setShowCreateWeekly(null);
   setWpActivityId(''); setWpUnit(''); setWpEstQty(''); setWpFloor([]); setWpConstraint(''); setWpWeek('1');
 };
-console.log()
-  // const handleCreateDaily = () => {
-  //   if (!showCreateDaily || !dpDate || !dpQty) return;
-  //   const daily: DailyPlan = {
-  //     id: crypto.randomUUID(), weeklyPlanId: showCreateDaily.wpId,
-  //     dayNumber: Number(dpDay), date: dpDate,
-  //     plannedQuantity: Number(dpQty), unit: dpUnits, constraint: dpConstraint,
-  //     floorUnits: dpFloor, engineerNote: dpNote, status: 'pending',
-  //   };
-  //   addDailyPlan(project.id, showCreateDaily.swpId, showCreateDaily.wpId, daily);
-  //   setDpDate(''); setDpQty(''); setDpConstraint(''); setDpFloor([]); setDpNote(''); setDpDay('1'); setDpUnits('')
-  //   setShowCreateDaily(null);
-  // };
-
+  
 const handleCreateDaily = () => {
   if (!showCreateDaily || !dpDate || !dpQty) return;
 
@@ -624,6 +611,8 @@ console.log(selectedActivity)
                         <TableHead className="text-xs">Contractor</TableHead>
                         <TableHead className="text-xs">Trade</TableHead>
                         <TableHead className="text-xs">Shortfall</TableHead>
+                        <TableHead className="text-xs">Constraint</TableHead>
+                        <TableHead className="text-xs">ROV</TableHead>
                         <TableHead className="text-xs">Contractor Notes</TableHead>
                         <TableHead className="text-xs">Deadline</TableHead>
                         <TableHead className="text-xs">Status</TableHead>
@@ -637,7 +626,9 @@ console.log(selectedActivity)
                           <TableCell className="text-xs">{getContractorName(ticket.contractorName)}</TableCell>
                           <TableCell className="text-xs">{ticket.tradeName}</TableCell>
                           <TableCell className="text-xs text-destructive font-semibold">{ticket.shortfallQuantity} {ticket.unit}</TableCell>
-                          <TableCell className="text-xs max-w-[200px] truncate">{ticket.contractorStatement || '—'}</TableCell>
+                          <TableCell className="text-xs">{ticket.constraint}</TableCell>
+                          <TableCell className="text-xs">{ticket.rov}</TableCell>
+                          <TableCell className="text-xs max-w-[200px]">{ticket.contractorStatement || '—'}</TableCell>
                           <TableCell className="text-xs">{ticket.recoveryDeadline || '—'}</TableCell>
                           <TableCell><StatusBadge status={ticket.status} /></TableCell>
                         </TableRow>
@@ -706,6 +697,7 @@ console.log(selectedActivity)
                                 <TableHead className="text-xs font-semibold">Remaining Qty</TableHead>
                                 <TableHead className="text-xs font-semibold">Floor</TableHead>
                                 <TableHead className="text-xs font-semibold">Constraint</TableHead>
+                                <TableHead className="text-xs font-semibold">Eng Comments</TableHead>
                                 <TableHead className="text-xs font-semibold">ROV Comments</TableHead>
                                 <TableHead className="text-xs font-semibold">Status</TableHead>
                                 <TableHead className="text-xs font-semibold">Actions</TableHead>
@@ -721,7 +713,8 @@ console.log(selectedActivity)
                                   <TableHead className="text-xs font-semibold">{dp.remainingQuantity}</TableHead>
                                   <TableCell className="text-xs">{dp.floorUnits}</TableCell>
                                   <TableCell className="text-xs">{dp.constraint || '—'}</TableCell>
-                                  <TableCell className="text-xs">{dp.supervisorNote || dp.engineerNote || '—'}</TableCell>
+                                  <TableCell className="text-xs">{dp.engineerNote || '—'}</TableCell>
+                                  <TableCell className="text-xs">{dp.rov || '—'}</TableCell>
                                   <TableCell><StatusBadge status={dp.status} /></TableCell>
                                   <TableCell className="space-x-1">
                                     {dp.status === 'pending' && (
@@ -776,6 +769,8 @@ console.log(selectedActivity)
                     <TableHead className="font-semibold">Target</TableHead>
                     <TableHead className="font-semibold">Floor</TableHead>
                     <TableHead className="font-semibold">Constraint</TableHead>
+                     <TableHead className="font-semibold">Engineer Comments</TableHead>
+                      <TableHead className="font-semibold">ROV</TableHead>
                     {/* <TableHead className="font-semibold">Status</TableHead> */}
                     <TableHead className="font-semibold w-[350px]">Actions</TableHead>
                   </TableRow>
@@ -790,6 +785,8 @@ console.log(selectedActivity)
                       <TableCell className="text-sm">{dp.plannedQuantity} {dp.weekUnit}</TableCell>
                       <TableCell className="text-xs">{dp.floorUnits}</TableCell>
                       <TableCell className="text-xs">{dp.constraint || '—'}</TableCell>
+                      <TableCell className="text-xs">{dp.engineerNote || '—'}</TableCell>
+                      <TableCell className="text-xs">{dp.rov || '—'}</TableCell>
                       {/* <TableCell><StatusBadge status={dp.status} /></TableCell> */}
                       <TableCell>
                         {dp.status === 'forwarded' && (
@@ -857,7 +854,10 @@ console.log(selectedActivity)
                         <div><span className="text-muted-foreground">Done:</span> {ticket.completedQuantity} {ticket.unit}</div>
                         <div className="text-destructive font-semibold">Shortfall: {ticket.shortfallQuantity} {ticket.unit}</div>
                       </div>
-                      <div className="text-xs"><span className="font-medium">ROV:</span> {ticket.rov || '—'}</div>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                       <div><span className="font-medium">ROV:</span> {ticket.rov || '—'} </div>
+                        <div><span className="font-medium">Constraint:</span> {ticket.constraint || '—'}</div>
+       </div>
 
                       {status !== 'closed' && (
                         <div className="grid grid-cols-2 gap-3 pt-2 border-t">
