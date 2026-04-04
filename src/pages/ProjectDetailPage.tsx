@@ -446,10 +446,12 @@ console.log(selectedActivity)
                       </div>
                       <div>
                         <Label className="text-xs">Trade Activity</Label>
-                        <Select value={editData.tradeActivity} onValueChange={v => setEditData({ ...editData, tradeActivity: v })}>
-                          <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
-                          <SelectContent>{TRADE_ACTIVITIES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-                        </Select>
+                        <Input
+                      className="mt-1"
+                      placeholder="Enter Trade Activity"
+                      value={editData.tradeActivity || ""}
+                      onChange={(e) => setEditData({...editData, tradeActivity : e.target.value})}
+                    />
                       </div>
                       <div className="grid grid-cols-3 gap-3">
                         <div>

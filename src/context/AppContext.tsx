@@ -65,11 +65,40 @@ useEffect(() => {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, sixWeekPlans: [...p.sixWeekPlans, plan] } : p));
   }, []);
 
-  const updateSixWeekPlanActivities = useCallback((projectId: string, sixWeekPlanId: string, activities: PlanActivity[]) => {
-    setProjects(prev => prev.map(p => p.id === projectId ? {
-      ...p, sixWeekPlans: p.sixWeekPlans.map(swp => swp.id === sixWeekPlanId ? { ...swp, activities } : swp)
-    } : p));
-  }, []);
+const updateSixWeekPlanActivities = useCallback(
+  (projectId: string, sixWeekPlanId: string, activities: PlanActivity[]) => {
+    setProjects(prev =>
+      prev.map(p => {
+        if (p.id !== projectId) return p;
+
+        return {
+          ...p,
+          sixWeekPlans: p.sixWeekPlans.map(swp => {
+            if (swp.id !== sixWeekPlanId) return swp;
+
+            const updatedActivities = activities.map(activity => {
+              // 🔹 Sum of used quantity from subWeeks
+              const usedQuantity =
+                activity.subWeeks?.reduce(
+                  (sum, sw) => sum + (sw.quantity || 0),
+                  0
+                ) || 0;
+
+              return {
+                ...activity,
+                remainingQuantity:
+                  (activity.estimatedQuantity || 0) - usedQuantity
+              };
+            });
+
+            return { ...swp, activities: updatedActivities };
+          })
+        };
+      })
+    );
+  },
+  []
+);
 
 
 
