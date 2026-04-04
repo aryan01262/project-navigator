@@ -581,6 +581,50 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
           )}
         </CardContent>
       </Card>
+
+      {/* Constraint Status from Tickets */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><PieChartIcon className="w-5 h-5 text-accent" /> Constraint Status (Tickets)</CardTitle>
+          <p className="text-sm text-muted-foreground">Status distribution of shortfall tickets and their associated constraints</p>
+        </CardHeader>
+        <CardContent>
+          {constraintStatusPieData.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No tickets raised yet.</p>
+          ) : (
+            <>
+              <div className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={constraintStatusPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine={false}>
+                      {constraintStatusPieData.map((entry, i) => <Cell key={i} fill={STATUS_COLORS[entry.name] || COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-4 space-y-2">
+                <h4 className="text-sm font-semibold text-foreground">Tickets by Constraint & Status</h4>
+                {projectTickets.map((ticket, i) => (
+                  <div key={ticket.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border">
+                    <div className="flex items-center gap-3">
+                      <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: STATUS_COLORS[ticket.status === 'open' ? 'Open' : ticket.status === 'in-progress' ? 'In Progress' : 'Closed'] }} />
+                      <div>
+                        <span className="text-sm font-medium text-foreground">{ticket.constraint || 'No constraint'}</span>
+                        <span className="text-xs text-muted-foreground ml-2">({ticket.tradeName})</span>
+                      </div>
+                    </div>
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${ticket.status === 'open' ? 'bg-destructive/10 text-destructive' : ticket.status === 'in-progress' ? 'bg-accent/10 text-accent' : 'bg-primary/10 text-primary'}`}>
+                      {ticket.status === 'open' ? 'Open' : ticket.status === 'in-progress' ? 'In Progress' : 'Closed'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
