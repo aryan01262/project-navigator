@@ -151,7 +151,21 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
   });
   const rovPieData = Object.entries(rovCounts).map(([name, value]) => ({ name, value }));
 
-  const trades = [...new Set(allDailyPlans.map(dp => dp.tradeActivity).filter(Boolean))];
+  // --- PIE CHART: Constraint Status (from tickets) ---
+  const projectTickets = tickets.filter(t => t.projectId === projectId);
+  const statusCounts: Record<string, number> = {};
+  projectTickets.forEach(t => {
+    const label = t.status === 'open' ? 'Open' : t.status === 'in-progress' ? 'In Progress' : 'Closed';
+    statusCounts[label] = (statusCounts[label] || 0) + 1;
+  });
+  const constraintStatusPieData = Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
+
+  const STATUS_COLORS: Record<string, string> = {
+    'Open': 'hsl(var(--destructive))',
+    'In Progress': 'hsl(var(--accent))',
+    'Closed': 'hsl(var(--primary))',
+  };
+
   const outputWeeks = [...new Set(allDailyPlans.map(dp => dp.weekNumber))].sort((a, b) => a - b);
 
   const filteredDailyPlans = outputWeekTab === 'all'
