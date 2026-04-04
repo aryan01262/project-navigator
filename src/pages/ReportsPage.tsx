@@ -5,7 +5,7 @@ import { constraintCategories } from '@/types/planner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, BarChart3, AlertTriangle, PieChart as PieChartIcon, Users } from 'lucide-react';
+import { ArrowLeft, BarChart3, AlertTriangle, PieChart as PieChartIcon, Users, TrendingUp } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Legend,
@@ -31,6 +31,7 @@ const ReportsPage = () => {
   const navigate = useNavigate();
   const { projects, role, contractors } = useAppContext();
   const [ppcTab, setPpcTab] = useState('daily');
+  const [outputWeekTab, setOutputWeekTab] = useState<number | 'all'>('all');
 
   const project = projects.find(p => p.id === projectId);
 
@@ -139,6 +140,26 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
     }
   });
   const constraintCatPieData = Object.entries(constraintCatCounts).map(([name, value]) => ({ name, value }));
+
+  // --- OUTPUT PER DAY: actual quantity per trade per day, grouped by week ---
+  const trades = [...new Set(allDailyPlans.map(dp => dp.tradeActivity).filter(Boolean))];
+  const outputWeeks = [...new Set(allDailyPlans.map(dp => dp.weekNumber))].sort((a, b) => a - b);
+
+  const filteredDailyPlans = outputWeekTab === 'all'
+    ? allDailyPlans
+    : allDailyPlans.filter(dp => dp.weekNumber === outputWeekTab);
+
+  const outputPerDayData = DAY_NAMES.map((name, i) => {
+    const dayNum = i + 1;
+    const dayPlans = filteredDailyPlans.filter(dp => dp.dayNumber === dayNum);
+    const entry: Record<string, any> = { name };
+    trades.forEach(trade => {
+      entry[trade] = dayPlans
+        .filter(dp => dp.tradeActivity === trade)
+        .reduce((s, dp) => s + (dp.completedQuantity || 0), 0);
+    });
+    return entry;
+  });
 
   const activePpcData = ppcTab === 'daily' ? dailyPpcData : weeklyPpcData;
   const avgPPC = activePpcData.filter(d => d.planned > 0).length > 0
@@ -437,6 +458,40 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
   </BarChart>
 </ResponsiveContainer>
 </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Output Per Day */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" /> Output Per Day (Actual Quantity by Trade)</CardTitle>
+          <p className="text-sm text-muted-foreground">Daily actual output broken down by trade activity</p>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2 mb-4 flex-wrap">
+            <Button size="sm" variant={outputWeekTab === 'all' ? 'default' : 'outline'} onClick={() => setOutputWeekTab('all')}>All Weeks</Button>
+            {outputWeeks.map(w => (
+              <Button key={w} size="sm" variant={outputWeekTab === w ? 'default' : 'outline'} onClick={() => setOutputWeekTab(w)}>Week {w}</Button>
+            ))}
+          </div>
+          {trades.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">No trade data available yet.</p>
+          ) : (
+            <div className="h-[350px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={outputPerDayData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="name" className="text-xs fill-muted-foreground" />
+                  <YAxis className="text-xs fill-muted-foreground" />
+                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                  <Legend />
+                  {trades.map((trade, i) => (
+                    <Bar key={trade} dataKey={trade} fill={COLORS[i % COLORS.length]} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </CardContent>
       </Card>
