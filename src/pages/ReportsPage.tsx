@@ -350,7 +350,7 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
   <BarChart
     data={contractorPerfData}
     layout="vertical"
-    margin={{ top: 10, right: 30, left: 140, bottom: 10 }}
+    margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
     barCategoryGap={12}
   >
     {/* Grid (clean + minimal) */}
