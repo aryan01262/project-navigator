@@ -31,6 +31,7 @@ const ReportsPage = () => {
   const navigate = useNavigate();
   const { projects, role, contractors } = useAppContext();
   const [ppcTab, setPpcTab] = useState('daily');
+  const [outputWeekTab, setOutputWeekTab] = useState<number | 'all'>('all');
 
   const project = projects.find(p => p.id === projectId);
 
