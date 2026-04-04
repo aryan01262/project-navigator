@@ -77,12 +77,10 @@ const updateSixWeekPlanActivities = useCallback(
             if (swp.id !== sixWeekPlanId) return swp;
 
             const updatedActivities = activities.map(activity => {
-              // 🔹 Sum of used quantity from subWeeks
-              const usedQuantity =
-                activity.subWeeks?.reduce(
-                  (sum, sw) => sum + (sw.quantity || 0),
-                  0
-                ) || 0;
+              // 🔹 Sum of used quantity from weekly plans linked to this activity
+              const usedQuantity = swp.weeklyPlans
+                .filter(wp => wp.taskId === activity.id)
+                .reduce((sum, wp) => sum + (wp.estimatedQuantity || 0), 0);
 
               return {
                 ...activity,
