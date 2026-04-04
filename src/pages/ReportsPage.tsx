@@ -140,6 +140,27 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
   });
   const constraintCatPieData = Object.entries(constraintCatCounts).map(([name, value]) => ({ name, value }));
 
+  // --- OUTPUT PER DAY: actual quantity per trade per day, grouped by week ---
+  const [outputWeekTab, setOutputWeekTab] = useState<number | 'all'>('all');
+  const trades = [...new Set(allDailyPlans.map(dp => dp.tradeActivity).filter(Boolean))];
+  const outputWeeks = [...new Set(allDailyPlans.map(dp => dp.weekNumber))].sort((a, b) => a - b);
+
+  const filteredDailyPlans = outputWeekTab === 'all'
+    ? allDailyPlans
+    : allDailyPlans.filter(dp => dp.weekNumber === outputWeekTab);
+
+  const outputPerDayData = DAY_NAMES.map((name, i) => {
+    const dayNum = i + 1;
+    const dayPlans = filteredDailyPlans.filter(dp => dp.dayNumber === dayNum);
+    const entry: Record<string, any> = { name };
+    trades.forEach(trade => {
+      entry[trade] = dayPlans
+        .filter(dp => dp.tradeActivity === trade)
+        .reduce((s, dp) => s + (dp.completedQuantity || 0), 0);
+    });
+    return entry;
+  });
+
   const activePpcData = ppcTab === 'daily' ? dailyPpcData : weeklyPpcData;
   const avgPPC = activePpcData.filter(d => d.planned > 0).length > 0
     ? Math.round(activePpcData.filter(d => d.planned > 0).reduce((s, d) => s + d.ppc, 0) / activePpcData.filter(d => d.planned > 0).length)
