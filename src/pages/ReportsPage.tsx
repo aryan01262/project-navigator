@@ -29,7 +29,7 @@ const COLORS = [
 const ReportsPage = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const { projects, role, contractors } = useAppContext();
+  const { projects, role, contractors, tickets } = useAppContext();
   const [ppcTab, setPpcTab] = useState('daily');
   const [outputWeekTab, setOutputWeekTab] = useState<number | 'all'>('all');
 
