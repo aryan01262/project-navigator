@@ -5,7 +5,7 @@ import { constraintCategories } from '@/types/planner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, BarChart3, AlertTriangle, PieChart as PieChartIcon, Users } from 'lucide-react';
+import { ArrowLeft, BarChart3, AlertTriangle, PieChart as PieChartIcon, Users, TrendingUp } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Legend,
