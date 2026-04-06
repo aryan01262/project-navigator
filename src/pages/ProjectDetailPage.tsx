@@ -55,6 +55,7 @@ const ProjectDetailPage = () => {
 
   // 6-week plan form
   const [planName, setPlanName] = useState('');
+  const [buildingName, setBuildingName] = useState('');
   const [planStartDate, setPlanStartDate] = useState<Date>();
   const [planActivities, setPlanActivities] = useState<PlanActivity[]>([emptyActivity()]);
   const [editingActivityIdx, setEditingActivityIdx] = useState<number | null>(0);
@@ -144,7 +145,7 @@ const adminTickets = tickets;
       console.log(validActivities)
     if (validActivities.length === 0) return;
     const plan: SixWeekPlan = {
-      id: crypto.randomUUID(), projectId: project.id, name: planName,
+      id: crypto.randomUUID(), projectId: project.id, name: planName, buildingName: buildingName,
       activities: validActivities,
       startDate: format(planStartDate, 'yyyy-MM-dd'), endDate: format(planEndDate, 'yyyy-MM-dd'),
       createdAt: new Date().toISOString(), weeklyPlans: [],
@@ -907,6 +908,7 @@ console.log(selectedActivity)
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto w-[800px]" >
           <DialogHeader><DialogTitle>Create 6-Week Plan</DialogTitle></DialogHeader>
           <div className="space-y-4">
+            <div><Label>Building Name</Label><Input value={buildingName} onChange={e => setBuildingName(e.target.value)} placeholder="e.g. Building 1" className="mt-1" /></div>
             <div><Label>Plan Name</Label><Input value={planName} onChange={e => setPlanName(e.target.value)} placeholder="e.g. RCC Phase 1" className="mt-1" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div>

@@ -31,6 +31,7 @@ export interface SixWeekPlan {
   id: string;
   projectId: string;
   name: string;
+  buildingName: string;
   activities: PlanActivity[];
   startDate: string;
   endDate: string;
