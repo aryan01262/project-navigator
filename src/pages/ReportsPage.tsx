@@ -627,6 +627,85 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
           )}
         </CardContent>
       </Card>
+      {/* Constraint in Trade Activity */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><ClipboardList className="w-5 h-5 text-destructive" /> Constraint in Trade Activity</CardTitle>
+          <p className="text-sm text-muted-foreground">Categorized constraints across all trade activities in this project</p>
+        </CardHeader>
+        <CardContent>
+          {(() => {
+            // Build table rows: each daily plan with a constraint
+            const constraintRows = allDailyPlans.filter(dp => {
+              const c = dp.constraint || dp.constraintLog;
+              return c && c !== 'No Constraint';
+            }).map(dp => {
+              const reason = dp.constraint || dp.constraintLog || '';
+              const match = constraintCategories.find(cc => cc.reason.toLowerCase() === reason.toLowerCase());
+              return {
+                tradeActivity: dp.tradeActivity || '-',
+                constraint: reason,
+                constraintCategory: match ? match.category : 'OTHER',
+                date: dp.date || `Day ${dp.dayNumber}`,
+                unit: dp.weekUnit || dp.unit || '-',
+              };
+            });
+
+            // Pie data: group by constraint category
+            const catCounts: Record<string, number> = {};
+            constraintRows.forEach(r => {
+              catCounts[r.constraintCategory] = (catCounts[r.constraintCategory] || 0) + 1;
+            });
+            const tradeConstraintPieData = Object.entries(catCounts).map(([name, value]) => ({ name, value }));
+
+            if (constraintRows.length === 0) {
+              return <p className="text-sm text-muted-foreground">No constraints logged in any trade activity yet.</p>;
+            }
+
+            return (
+              <>
+                <div className="h-[320px] mb-6">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={tradeConstraintPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine={false}>
+                        {tradeConstraintPieData.map((_, i) => <Cell key={i} fill={COLORS[(i + 1) % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="rounded-md border overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Trade Activity</TableHead>
+                        <TableHead>Constraint</TableHead>
+                        <TableHead>Constraint Category</TableHead>
+                        <TableHead>Date (Day)</TableHead>
+                        <TableHead>Unit</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {constraintRows.map((row, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="font-medium">{row.tradeActivity}</TableCell>
+                          <TableCell>{row.constraint}</TableCell>
+                          <TableCell>
+                            <span className="px-2 py-1 rounded-full text-xs font-semibold bg-muted text-foreground">{row.constraintCategory}</span>
+                          </TableCell>
+                          <TableCell>{row.date}</TableCell>
+                          <TableCell>{row.unit}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            );
+          })()}
+        </CardContent>
+      </Card>
     </div>
   );
 };
