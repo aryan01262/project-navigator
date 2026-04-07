@@ -706,6 +706,71 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
           })()}
         </CardContent>
       </Card>
+
+      {/* Trade Activity Index - Horizontal Bar Chart */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> Trade Activity Index</CardTitle>
+          <p className="text-sm text-muted-foreground">Total quantity per trade activity, colored by unit type</p>
+        </CardHeader>
+        <CardContent>
+          {(() => {
+            // Aggregate total estimated quantity per trade activity with unit
+            const tradeMap: Record<string, { trade: string; totalQty: number; unit: string }> = {};
+            project.sixWeekPlans.forEach(swp => {
+              swp.weeklyPlans.forEach(wp => {
+                const key = wp.tradeActivity;
+                if (!key) return;
+                if (!tradeMap[key]) {
+                  tradeMap[key] = { trade: key, totalQty: 0, unit: wp.unit || '' };
+                }
+                tradeMap[key].totalQty += wp.estimatedQuantity || 0;
+              });
+            });
+            const tradeIndexData = Object.values(tradeMap).sort((a, b) => b.totalQty - a.totalQty);
+
+            const getUnitColor = (unit: string) => {
+              const u = unit.toUpperCase();
+              if (u === 'SQM') return 'hsl(150, 60%, 45%)';
+              if (u === 'MT') return 'hsl(210, 70%, 50%)';
+              if (u === 'CUBIC') return 'hsl(30, 80%, 55%)';
+              return 'hsl(var(--primary))';
+            };
+
+            if (tradeIndexData.length === 0) {
+              return <p className="text-sm text-muted-foreground">No trade activities found.</p>;
+            }
+
+            const chartHeight = Math.max(300, tradeIndexData.length * 40);
+
+            return (
+              <>
+                <div className="flex gap-4 mb-4 flex-wrap">
+                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(150, 60%, 45%)' }} /> SQM</span>
+                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(210, 70%, 50%)' }} /> MT</span>
+                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(30, 80%, 55%)' }} /> CUBIC</span>
+                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(var(--primary))' }} /> FLAT / Other</span>
+                </div>
+                <div style={{ height: chartHeight }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={tradeIndexData} layout="vertical" margin={{ left: 120, right: 20, top: 5, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                      <YAxis dataKey="trade" type="category" tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} width={110} />
+                      <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number, _: string, entry: any) => [`${value} ${entry.payload.unit}`, 'Total Qty']} />
+                      <Bar dataKey="totalQty" radius={[0, 4, 4, 0]}>
+                        {tradeIndexData.map((entry, i) => (
+                          <Cell key={i} fill={getUnitColor(entry.unit)} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            );
+          })()}
+        </CardContent>
+      </Card>
     </div>
   );
 };
