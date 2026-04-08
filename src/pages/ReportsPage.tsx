@@ -554,8 +554,21 @@ const weeklyAvg = (() => {
             const chartHeight = Math.max(250, tradeData.length * 50);
             const contractorName = contractors.find(c => c.id === selectedContractorId)?.name || selectedContractorId;
 
+            // Get trade name(s) from activities assigned to this contractor
+            const contractorTrades = [...new Set(
+              project.sixWeekPlans.flatMap(swp =>
+                (swp.activities || []).filter(a => a.contractorId === selectedContractorId).map(a => a.trade)
+              ).filter(Boolean)
+            )];
+            const tradeName = contractorTrades.length > 0 ? contractorTrades.join(', ') : 'N/A';
+
             return (
               <>
+                {/* Trade Name */}
+                <div className="mb-4 p-3 rounded-md bg-muted/50 border">
+                  <p className="text-sm text-muted-foreground">Trade</p>
+                  <p className="text-lg font-semibold text-foreground">{tradeName}</p>
+                </div>
                 {/* Color Legend */}
                 <div className="flex gap-4 mb-4 flex-wrap">
                   <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(150, 60%, 45%)' }} /> SQM</span>
