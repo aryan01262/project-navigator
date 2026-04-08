@@ -481,110 +481,161 @@ const weeklyAvg = (() => {
         </CardContent>
       </Card>
 
-            {/* Contractor Performance Horizontal Bar Chart */}
+            {/* Contractor Performance - Dropdown Based */}
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Contractor Performance</CardTitle>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <CardTitle className="flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Contractor Performance</CardTitle>
+            <Select value={selectedContractorId} onValueChange={setSelectedContractorId}>
+              <SelectTrigger className="w-[260px]">
+                <SelectValue placeholder="Select Contractor" />
+              </SelectTrigger>
+              <SelectContent>
+                {(() => {
+                  const activeContractorIds = [...new Set(
+                    project.sixWeekPlans.flatMap(swp => swp.weeklyPlans.map(wp => wp.contractorId))
+                  )];
+                  return activeContractorIds.map(cId => {
+                    const c = contractors.find(ct => ct.id === cId);
+                    return <SelectItem key={cId} value={cId}>{c?.name || cId}</SelectItem>;
+                  });
+                })()}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-sm text-muted-foreground">Trade activity breakdown for selected contractor</p>
         </CardHeader>
         <CardContent>
-          {contractorPerfData.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No contractor data available yet.</p>
-          ) : (
-           <div style={{ height: Math.max(180, contractorPerfData.length * 40) }}>
- <ResponsiveContainer width="100%" height="100%">
-  <BarChart
-    data={contractorPerfData}
-    layout="vertical"
-    margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
-    barCategoryGap={12}
-  >
-    {/* Grid (clean + minimal) */}
-    <CartesianGrid
-      strokeDasharray="3 6"
-      stroke="hsl(var(--border) / 0.3)"
-      vertical={false}
-    />
+          {(() => {
+            if (!selectedContractorId) {
+              return <p className="text-sm text-muted-foreground py-4 text-center">Please select a contractor to view performance.</p>;
+            }
 
-    {/* X Axis */}
-    <XAxis
-      type="number"
-      axisLine={{ stroke: "hsl(var(--border) / 0.6)", strokeWidth: 1 }}
-      tickLine={false}
-      tick={{
-        fontSize: 11,
-        fill: "hsl(var(--muted-foreground))",
-      }}
-    />
+            // Get all weekly plans for this contractor
+            const contractorWPs = project.sixWeekPlans.flatMap(swp =>
+              swp.weeklyPlans.filter(wp => wp.contractorId === selectedContractorId)
+            );
 
-    {/* Y Axis */}
-    <YAxis
-      type="category"
-      dataKey="name"
-      width={170}
-      axisLine={{ stroke: "hsl(var(--border) / 0.6)", strokeWidth: 1 }}
-      tickLine={false}
-      tick={{
-        fontSize: 12,
-        fill: "hsl(var(--foreground))",
-        fontWeight: 500,
-      }}
-    />
+            if (contractorWPs.length === 0) {
+              return <p className="text-sm text-muted-foreground py-4 text-center">No data for this contractor.</p>;
+            }
 
-    
+            // Group by tradeActivity, aggregate actual & pending, keep unit
+            const tradeMap: Record<string, { trade: string; actual: number; pending: number; unit: string }> = {};
+            contractorWPs.forEach(wp => {
+              const key = `${wp.tradeActivity}__${wp.unit}`;
+              if (!tradeMap[key]) {
+                tradeMap[key] = { trade: wp.tradeActivity, actual: 0, pending: 0, unit: wp.unit || '' };
+              }
+              const totalActual = wp.dailyPlans.reduce((s, dp) => s + (dp.completedQuantity || 0), 0);
+              const totalPlanned = wp.dailyPlans.reduce((s, dp) => s + dp.plannedQuantity, 0);
+              tradeMap[key].actual += totalActual;
+              tradeMap[key].pending += Math.max(0, totalPlanned - totalActual);
+            });
 
-    {/* Tooltip (modern glass look) */}
-    <Tooltip
-      cursor={{ fill: "rgba(255,255,255,0.04)" }}
-      content={({ active, payload }) => {
-        if (active && payload && payload.length) {
-          const data = payload[0].payload;
-          return (
-            <div className="bg-white/90 backdrop-blur-lg shadow-xl border border-gray-200 rounded-xl px-4 py-3 text-xs">
-              <p className="font-semibold text-gray-900 mb-2">
-                {data.name}
-              </p>
+            const tradeData = Object.values(tradeMap).sort((a, b) => (b.actual + b.pending) - (a.actual + a.pending));
 
-              <div className="flex justify-between gap-8 text-gray-600">
-                <span>Planned</span>
-                <span className="font-semibold text-gray-900">
-                  {data.planned}
-                </span>
-              </div>
+            const getUnitColor = (unit: string) => {
+              const u = unit.toUpperCase();
+              if (u === 'SQM') return 'hsl(150, 60%, 45%)';
+              if (u === 'MT') return 'hsl(210, 70%, 50%)';
+              if (u === 'CUBIC') return 'hsl(30, 80%, 55%)';
+              return 'hsl(var(--primary))';
+            };
 
-              <div className="flex justify-between gap-8 text-gray-600">
-                <span>Actual</span>
-                <span className="font-semibold text-primary">
-                  {data.actual}
-                </span>
-              </div>
-            </div>
-          );
-        }
-        return null;
-      }}
-    />
+            const getUnitPendingColor = (unit: string) => {
+              const u = unit.toUpperCase();
+              if (u === 'SQM') return 'hsl(150, 40%, 75%)';
+              if (u === 'MT') return 'hsl(210, 50%, 78%)';
+              if (u === 'CUBIC') return 'hsl(30, 60%, 80%)';
+              return 'hsl(var(--muted))';
+            };
 
-    {/* Actual */}
-    <Bar
-      dataKey="actual"
-      stackId="a"
-      fill="hsl(var(--primary))"
-      radius={[10, 0, 0, 10]}
-      maxBarSize={14}
-    />
+            const chartHeight = Math.max(250, tradeData.length * 50);
+            const contractorName = contractors.find(c => c.id === selectedContractorId)?.name || selectedContractorId;
 
-    {/* Remaining */}
-    <Bar
-      dataKey="remaining"
-      stackId="a"
-      fill="hsl(var(--muted))"
-      radius={[0, 10, 10, 0]}
-      maxBarSize={14}
-    />
-  </BarChart>
-</ResponsiveContainer>
-</div>
-          )}
+            return (
+              <>
+                {/* Color Legend */}
+                <div className="flex gap-4 mb-4 flex-wrap">
+                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(150, 60%, 45%)' }} /> SQM</span>
+                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(210, 70%, 50%)' }} /> MT</span>
+                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(30, 80%, 55%)' }} /> CUBIC</span>
+                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(var(--primary))' }} /> FLAT / Other</span>
+                  <span className="ml-4 flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded bg-muted" /> Pending</span>
+                </div>
+
+                {/* Horizontal Bar Chart */}
+                <div style={{ height: chartHeight }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={tradeData} layout="vertical" margin={{ left: 140, right: 20, top: 5, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={true} horizontal={false} />
+                      <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
+                      <YAxis dataKey="trade" type="category" tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} width={130} />
+                      <Tooltip
+                        cursor={{ fill: 'hsl(var(--muted) / 0.2)' }}
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            return (
+                              <div className="rounded-lg border bg-card px-4 py-3 text-xs shadow-lg">
+                                <p className="font-semibold text-foreground mb-1">{data.trade}</p>
+                                <p className="text-muted-foreground">Unit: <span className="font-medium text-foreground">{data.unit}</span></p>
+                                <p className="text-muted-foreground">Actual: <span className="font-medium text-foreground">{data.actual}</span></p>
+                                <p className="text-muted-foreground">Pending: <span className="font-medium text-foreground">{data.pending}</span></p>
+                                <p className="text-muted-foreground">Total: <span className="font-medium text-foreground">{data.actual + data.pending}</span></p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Bar dataKey="actual" stackId="a" maxBarSize={18} radius={[0, 0, 0, 0]}>
+                        {tradeData.map((entry, i) => (
+                          <Cell key={i} fill={getUnitColor(entry.unit)} />
+                        ))}
+                      </Bar>
+                      <Bar dataKey="pending" stackId="a" maxBarSize={18} radius={[0, 4, 4, 0]}>
+                        {tradeData.map((entry, i) => (
+                          <Cell key={i} fill={getUnitPendingColor(entry.unit)} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Detail Table */}
+                <div className="mt-6 rounded-md border overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Trade Activity</TableHead>
+                        <TableHead>Unit</TableHead>
+                        <TableHead className="text-right">Actual Qty</TableHead>
+                        <TableHead className="text-right">Pending Qty</TableHead>
+                        <TableHead className="text-right">Total Qty</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tradeData.map((row, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="font-medium">{row.trade}</TableCell>
+                          <TableCell>
+                            <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{ backgroundColor: getUnitColor(row.unit), color: '#fff' }}>
+                              {row.unit}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">{row.actual}</TableCell>
+                          <TableCell className="text-right">{row.pending}</TableCell>
+                          <TableCell className="text-right font-semibold">{row.actual + row.pending}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            );
+          })()}
         </CardContent>
       </Card>
 
