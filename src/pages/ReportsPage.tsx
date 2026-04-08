@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { constraintCategories } from '@/types/planner';
@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, BarChart3, AlertTriangle, PieChart as PieChartIcon, Users, TrendingUp, ClipboardList } from 'lucide-react';
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Legend,
@@ -34,6 +35,7 @@ const ReportsPage = () => {
   const { projects, role, contractors, tickets } = useAppContext();
   const [ppcTab, setPpcTab] = useState('daily');
   const [outputWeekTab, setOutputWeekTab] = useState<number | 'all'>('all');
+  const [selectedContractorId, setSelectedContractorId] = useState<string>('');
 
   const project = projects.find(p => p.id === projectId);
 
