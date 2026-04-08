@@ -10,6 +10,7 @@ import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Legend,
+  ReferenceLine,
 } from 'recharts';
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -191,6 +192,20 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
     ? Math.round(activePpcData.filter(d => d.planned > 0).reduce((s, d) => s + d.ppc, 0) / activePpcData.filter(d => d.planned > 0).length)
     : 0;
 
+    const dailyAvg = (() => {
+  const totalActual = dailyPpcData.reduce((sum, item) => sum + item.actual, 0);
+  const totalPlanned = dailyPpcData.reduce((sum, item) => sum + item.planned, 0);
+
+  return totalPlanned ? (totalActual / totalPlanned) * 100 : 0;
+})();
+
+const weeklyAvg = (() => {
+  const totalActual = weeklyPpcData.reduce((sum, item) => sum + item.actual, 0);
+  const totalPlanned = weeklyPpcData.reduce((sum, item) => sum + item.planned, 0);
+
+  return totalPlanned ? (totalActual / totalPlanned) * 100 : 0;
+})();
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
@@ -199,6 +214,377 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
         </Button>
         <h1 className="text-2xl font-bold text-foreground">{project.name} — Reports</h1>
       </div>
+
+            {/* Trade Activity Index - Horizontal Bar Chart */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> Trade Activity Index</CardTitle>
+          <p className="text-sm text-muted-foreground">Total quantity per trade activity, colored by unit type</p>
+        </CardHeader>
+        <CardContent>
+          {(() => {
+            // Aggregate total estimated quantity per trade activity with unit
+            const tradeMap: Record<string, { trade: string; totalQty: number; unit: string }> = {};
+            project.sixWeekPlans.forEach(swp => {
+              swp.weeklyPlans.forEach(wp => {
+                const key = wp.tradeActivity;
+                if (!key) return;
+                if (!tradeMap[key]) {
+                  tradeMap[key] = { trade: key, totalQty: 0, unit: wp.unit || '' };
+                }
+                tradeMap[key].totalQty += wp.estimatedQuantity || 0;
+              });
+            });
+            const tradeIndexData = Object.values(tradeMap).sort((a, b) => b.totalQty - a.totalQty);
+
+            const getUnitColor = (unit: string) => {
+              const u = unit.toUpperCase();
+              if (u === 'SQM') return 'hsl(150, 60%, 45%)';
+              if (u === 'MT') return 'hsl(210, 70%, 50%)';
+              if (u === 'CUBIC') return 'hsl(30, 80%, 55%)';
+              return 'hsl(var(--primary))';
+            };
+
+            if (tradeIndexData.length === 0) {
+              return <p className="text-sm text-muted-foreground">No trade activities found.</p>;
+            }
+
+            const chartHeight = Math.max(300, tradeIndexData.length * 40);
+
+            return (
+              <>
+                <div className="flex gap-4 mb-4 flex-wrap">
+                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(150, 60%, 45%)' }} /> SQM</span>
+                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(210, 70%, 50%)' }} /> MT</span>
+                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(30, 80%, 55%)' }} /> CUBIC</span>
+                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(var(--primary))' }} /> FLAT / Other</span>
+                </div>
+                <div style={{ height: chartHeight }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={tradeIndexData} layout="vertical" margin={{ left: 120, right: 20, top: 5, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                      <YAxis dataKey="trade" type="category" tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} width={110} />
+                      <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number, _: string, entry: any) => [`${value} ${entry.payload.unit}`, 'Total Qty']} />
+                      <Bar dataKey="totalQty" radius={[0, 4, 4, 0]}>
+                        {tradeIndexData.map((entry, i) => (
+                          <Cell key={i} fill={getUnitColor(entry.unit)} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
+            {/* Constraint in Trade Activity */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><ClipboardList className="w-5 h-5 text-destructive" /> Constraint in Trade Activity</CardTitle>
+          <p className="text-sm text-muted-foreground">Categorized constraints across all trade activities in this project</p>
+        </CardHeader>
+        <CardContent>
+          {(() => {
+            // Build table rows: each daily plan with a constraint
+            const constraintRows = allDailyPlans.filter(dp => {
+              const c = dp.constraint || dp.constraintLog;
+              return c && c !== 'No Constraint';
+            }).map(dp => {
+              const reason = dp.constraint || dp.constraintLog || '';
+              const match = constraintCategories.find(cc => cc.reason.toLowerCase() === reason.toLowerCase());
+              return {
+                tradeActivity: dp.tradeActivity || '-',
+                constraint: reason,
+                constraintCategory: match ? match.category : 'OTHER',
+                date: dp.date || `Day ${dp.dayNumber}`,
+                unit: dp.weekUnit || dp.unit || '-',
+              };
+            });
+
+            // Pie data: group by constraint category
+            const catCounts: Record<string, number> = {};
+            constraintRows.forEach(r => {
+              catCounts[r.constraintCategory] = (catCounts[r.constraintCategory] || 0) + 1;
+            });
+            const tradeConstraintPieData = Object.entries(catCounts).map(([name, value]) => ({ name, value }));
+
+            if (constraintRows.length === 0) {
+              return <p className="text-sm text-muted-foreground">No constraints logged in any trade activity yet.</p>;
+            }
+
+            
+
+            return (
+              <>
+                <div className="h-[320px] mb-6">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={tradeConstraintPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine={false}>
+                        {tradeConstraintPieData.map((_, i) => <Cell key={i} fill={COLORS[(i + 1) % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="rounded-md border overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Trade Activity</TableHead>
+                        <TableHead>Constraint</TableHead>
+                        <TableHead>Constraint Category</TableHead>
+                        <TableHead>Date (Day)</TableHead>
+                        <TableHead>Unit</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {constraintRows.map((row, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="font-medium">{row.tradeActivity}</TableCell>
+                          <TableCell>{row.constraint}</TableCell>
+                          <TableCell>
+                            <span className="px-2 py-1 rounded-full text-xs font-semibold bg-muted text-foreground">{row.constraintCategory}</span>
+                          </TableCell>
+                          <TableCell>{row.date}</TableCell>
+                          <TableCell>{row.unit}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
+            {/* PPC Bar Chart with Daily/Weekly Tabs */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> PPC Report</CardTitle>
+          <p className="text-sm text-muted-foreground">PPC = (Actual Qty / Planned Qty) × 100%</p>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={ppcTab} onValueChange={setPpcTab} className="mb-4">
+            <TabsList>
+              <TabsTrigger value="daily">Daily PPC</TabsTrigger>
+              <TabsTrigger value="weekly">Weekly PPC</TabsTrigger>
+            </TabsList>
+            <TabsContent value="daily">
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dailyPpcData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="name" className="text-xs fill-muted-foreground" />
+                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} className="text-xs fill-muted-foreground" />
+                      <ReferenceLine
+  y={dailyAvg}
+  stroke="hsl(var(--primary))"
+  strokeDasharray="4 4"
+  strokeWidth={2}
+  label={{
+    value: `Avg: ${dailyAvg.toFixed(1)}%`,
+    position: "right",
+    fill: "hsl(var(--primary))",
+    fontSize: 12,
+  }}
+/>
+                   <Tooltip
+  formatter={(value: number, name: string, props: any) => {
+    if (name === 'ppc') {
+      return [`${value}%`, 'PPC'];
+    }
+    return [value, name];
+  }}
+  labelFormatter={(label, payload) => {
+    if (payload && payload.length) {
+      const data = payload[0].payload;
+      return `${label} | Planned: ${data.planned}, Actual: ${data.actual}`;
+    }
+    return label;
+  }}
+  contentStyle={{
+    backgroundColor: 'hsl(var(--card))',
+    border: '1px solid hsl(var(--border))',
+    borderRadius: '8px'
+  }}
+/>
+                    <Bar dataKey="ppc" radius={[6, 6, 0, 0]} maxBarSize={60}>
+                      {dailyPpcData.map((entry, index) => (
+                        <Cell key={index} fill={entry.ppc >= 80 ? 'hsl(var(--primary))' : entry.ppc >= 50 ? 'hsl(var(--accent))' : 'hsl(var(--destructive))'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </TabsContent>
+            <TabsContent value="weekly">
+              {weeklyPpcData.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">No weekly data available yet.</p>
+              ) : (
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={weeklyPpcData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="name" className="text-xs fill-muted-foreground" />
+                      <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} className="text-xs fill-muted-foreground" />
+                        <ReferenceLine
+  y={weeklyAvg}
+  stroke="hsl(var(--primary))"
+  strokeDasharray="4 4"
+  strokeWidth={2}
+  label={{
+    value: `Avg: ${weeklyAvg.toFixed(1)}%`,
+    position: "right",
+    fill: "hsl(var(--primary))",
+    fontSize: 12,
+  }}
+/>
+                      <Tooltip
+  content={({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="p-2 rounded-md border bg-card text-sm">
+          <p className="font-medium">{label}</p>
+          <p>PPC: {data.ppc}%</p>
+          <p>Planned: {data.planned}</p>
+          <p>Actual: {data.actual}</p>
+        </div>
+      );
+    }
+    return null;
+  }}
+/>
+                      <Bar dataKey="ppc" radius={[6, 6, 0, 0]} maxBarSize={60}>
+                        {weeklyPpcData.map((entry, index) => (
+                          <Cell key={index} fill={entry.ppc >= 80 ? 'hsl(var(--primary))' : entry.ppc >= 50 ? 'hsl(var(--accent))' : 'hsl(var(--destructive))'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+          <div className="flex gap-4 text-xs text-muted-foreground justify-center">
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-primary inline-block" /> ≥80%</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-accent inline-block" /> 50-79%</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-destructive inline-block" /> &lt;50%</span>
+          </div>
+        </CardContent>
+      </Card>
+
+            {/* Contractor Performance Horizontal Bar Chart */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Contractor Performance</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {contractorPerfData.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No contractor data available yet.</p>
+          ) : (
+           <div style={{ height: Math.max(180, contractorPerfData.length * 40) }}>
+ <ResponsiveContainer width="100%" height="100%">
+  <BarChart
+    data={contractorPerfData}
+    layout="vertical"
+    margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
+    barCategoryGap={12}
+  >
+    {/* Grid (clean + minimal) */}
+    <CartesianGrid
+      strokeDasharray="3 6"
+      stroke="hsl(var(--border) / 0.3)"
+      vertical={false}
+    />
+
+    {/* X Axis */}
+    <XAxis
+      type="number"
+      axisLine={{ stroke: "hsl(var(--border) / 0.6)", strokeWidth: 1 }}
+      tickLine={false}
+      tick={{
+        fontSize: 11,
+        fill: "hsl(var(--muted-foreground))",
+      }}
+    />
+
+    {/* Y Axis */}
+    <YAxis
+      type="category"
+      dataKey="name"
+      width={170}
+      axisLine={{ stroke: "hsl(var(--border) / 0.6)", strokeWidth: 1 }}
+      tickLine={false}
+      tick={{
+        fontSize: 12,
+        fill: "hsl(var(--foreground))",
+        fontWeight: 500,
+      }}
+    />
+
+    
+
+    {/* Tooltip (modern glass look) */}
+    <Tooltip
+      cursor={{ fill: "rgba(255,255,255,0.04)" }}
+      content={({ active, payload }) => {
+        if (active && payload && payload.length) {
+          const data = payload[0].payload;
+          return (
+            <div className="bg-white/90 backdrop-blur-lg shadow-xl border border-gray-200 rounded-xl px-4 py-3 text-xs">
+              <p className="font-semibold text-gray-900 mb-2">
+                {data.name}
+              </p>
+
+              <div className="flex justify-between gap-8 text-gray-600">
+                <span>Planned</span>
+                <span className="font-semibold text-gray-900">
+                  {data.planned}
+                </span>
+              </div>
+
+              <div className="flex justify-between gap-8 text-gray-600">
+                <span>Actual</span>
+                <span className="font-semibold text-primary">
+                  {data.actual}
+                </span>
+              </div>
+            </div>
+          );
+        }
+        return null;
+      }}
+    />
+
+    {/* Actual */}
+    <Bar
+      dataKey="actual"
+      stackId="a"
+      fill="hsl(var(--primary))"
+      radius={[10, 0, 0, 10]}
+      maxBarSize={14}
+    />
+
+    {/* Remaining */}
+    <Bar
+      dataKey="remaining"
+      stackId="a"
+      fill="hsl(var(--muted))"
+      radius={[0, 10, 10, 0]}
+      maxBarSize={14}
+    />
+  </BarChart>
+</ResponsiveContainer>
+</div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
@@ -289,203 +675,9 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
         </CardContent>
       </Card>
 
-      {/* PPC Bar Chart with Daily/Weekly Tabs */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> PPC Report</CardTitle>
-          <p className="text-sm text-muted-foreground">PPC = (Actual Qty / Planned Qty) × 100%</p>
-        </CardHeader>
-        <CardContent>
-          <Tabs value={ppcTab} onValueChange={setPpcTab} className="mb-4">
-            <TabsList>
-              <TabsTrigger value="daily">Daily PPC</TabsTrigger>
-              <TabsTrigger value="weekly">Weekly PPC</TabsTrigger>
-            </TabsList>
-            <TabsContent value="daily">
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dailyPpcData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="name" className="text-xs fill-muted-foreground" />
-                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} className="text-xs fill-muted-foreground" />
-                   <Tooltip
-  formatter={(value: number, name: string, props: any) => {
-    if (name === 'ppc') {
-      return [`${value}%`, 'PPC'];
-    }
-    return [value, name];
-  }}
-  labelFormatter={(label, payload) => {
-    if (payload && payload.length) {
-      const data = payload[0].payload;
-      return `${label} | Planned: ${data.planned}, Actual: ${data.actual}`;
-    }
-    return label;
-  }}
-  contentStyle={{
-    backgroundColor: 'hsl(var(--card))',
-    border: '1px solid hsl(var(--border))',
-    borderRadius: '8px'
-  }}
-/>
-                    <Bar dataKey="ppc" radius={[6, 6, 0, 0]} maxBarSize={60}>
-                      {dailyPpcData.map((entry, index) => (
-                        <Cell key={index} fill={entry.ppc >= 80 ? 'hsl(var(--primary))' : entry.ppc >= 50 ? 'hsl(var(--accent))' : 'hsl(var(--destructive))'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </TabsContent>
-            <TabsContent value="weekly">
-              {weeklyPpcData.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">No weekly data available yet.</p>
-              ) : (
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={weeklyPpcData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis dataKey="name" className="text-xs fill-muted-foreground" />
-                      <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} className="text-xs fill-muted-foreground" />
-                      <Tooltip
-  content={({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="p-2 rounded-md border bg-card text-sm">
-          <p className="font-medium">{label}</p>
-          <p>PPC: {data.ppc}%</p>
-          <p>Planned: {data.planned}</p>
-          <p>Actual: {data.actual}</p>
-        </div>
-      );
-    }
-    return null;
-  }}
-/>
-                      <Bar dataKey="ppc" radius={[6, 6, 0, 0]} maxBarSize={60}>
-                        {weeklyPpcData.map((entry, index) => (
-                          <Cell key={index} fill={entry.ppc >= 80 ? 'hsl(var(--primary))' : entry.ppc >= 50 ? 'hsl(var(--accent))' : 'hsl(var(--destructive))'} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
-          <div className="flex gap-4 text-xs text-muted-foreground justify-center">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-primary inline-block" /> ≥80%</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-accent inline-block" /> 50-79%</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-destructive inline-block" /> &lt;50%</span>
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Contractor Performance Horizontal Bar Chart */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Contractor Performance</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {contractorPerfData.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No contractor data available yet.</p>
-          ) : (
-           <div style={{ height: Math.max(180, contractorPerfData.length * 40) }}>
- <ResponsiveContainer width="100%" height="100%">
-  <BarChart
-    data={contractorPerfData}
-    layout="vertical"
-    margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
-    barCategoryGap={12}
-  >
-    {/* Grid (clean + minimal) */}
-    <CartesianGrid
-      strokeDasharray="3 6"
-      stroke="hsl(var(--border) / 0.3)"
-      vertical={false}
-    />
 
-    {/* X Axis */}
-    <XAxis
-      type="number"
-      axisLine={{ stroke: "hsl(var(--border) / 0.6)", strokeWidth: 1 }}
-      tickLine={false}
-      tick={{
-        fontSize: 11,
-        fill: "hsl(var(--muted-foreground))",
-      }}
-    />
 
-    {/* Y Axis */}
-    <YAxis
-      type="category"
-      dataKey="name"
-      width={170}
-      axisLine={{ stroke: "hsl(var(--border) / 0.6)", strokeWidth: 1 }}
-      tickLine={false}
-      tick={{
-        fontSize: 12,
-        fill: "hsl(var(--foreground))",
-        fontWeight: 500,
-      }}
-    />
-
-    {/* Tooltip (modern glass look) */}
-    <Tooltip
-      cursor={{ fill: "rgba(255,255,255,0.04)" }}
-      content={({ active, payload }) => {
-        if (active && payload && payload.length) {
-          const data = payload[0].payload;
-          return (
-            <div className="bg-white/90 backdrop-blur-lg shadow-xl border border-gray-200 rounded-xl px-4 py-3 text-xs">
-              <p className="font-semibold text-gray-900 mb-2">
-                {data.name}
-              </p>
-
-              <div className="flex justify-between gap-8 text-gray-600">
-                <span>Planned</span>
-                <span className="font-semibold text-gray-900">
-                  {data.planned}
-                </span>
-              </div>
-
-              <div className="flex justify-between gap-8 text-gray-600">
-                <span>Actual</span>
-                <span className="font-semibold text-primary">
-                  {data.actual}
-                </span>
-              </div>
-            </div>
-          );
-        }
-        return null;
-      }}
-    />
-
-    {/* Actual */}
-    <Bar
-      dataKey="actual"
-      stackId="a"
-      fill="hsl(var(--primary))"
-      radius={[10, 0, 0, 10]}
-      maxBarSize={14}
-    />
-
-    {/* Remaining */}
-    <Bar
-      dataKey="remaining"
-      stackId="a"
-      fill="hsl(var(--muted))"
-      radius={[0, 10, 10, 0]}
-      maxBarSize={14}
-    />
-  </BarChart>
-</ResponsiveContainer>
-</div>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Output Per Day */}
       <Card className="mb-6">
@@ -627,150 +819,9 @@ const contractorPerfData = Object.entries(contractorPerf).map(([cId, data]) => {
           )}
         </CardContent>
       </Card>
-      {/* Constraint in Trade Activity */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><ClipboardList className="w-5 h-5 text-destructive" /> Constraint in Trade Activity</CardTitle>
-          <p className="text-sm text-muted-foreground">Categorized constraints across all trade activities in this project</p>
-        </CardHeader>
-        <CardContent>
-          {(() => {
-            // Build table rows: each daily plan with a constraint
-            const constraintRows = allDailyPlans.filter(dp => {
-              const c = dp.constraint || dp.constraintLog;
-              return c && c !== 'No Constraint';
-            }).map(dp => {
-              const reason = dp.constraint || dp.constraintLog || '';
-              const match = constraintCategories.find(cc => cc.reason.toLowerCase() === reason.toLowerCase());
-              return {
-                tradeActivity: dp.tradeActivity || '-',
-                constraint: reason,
-                constraintCategory: match ? match.category : 'OTHER',
-                date: dp.date || `Day ${dp.dayNumber}`,
-                unit: dp.weekUnit || dp.unit || '-',
-              };
-            });
 
-            // Pie data: group by constraint category
-            const catCounts: Record<string, number> = {};
-            constraintRows.forEach(r => {
-              catCounts[r.constraintCategory] = (catCounts[r.constraintCategory] || 0) + 1;
-            });
-            const tradeConstraintPieData = Object.entries(catCounts).map(([name, value]) => ({ name, value }));
 
-            if (constraintRows.length === 0) {
-              return <p className="text-sm text-muted-foreground">No constraints logged in any trade activity yet.</p>;
-            }
 
-            return (
-              <>
-                <div className="h-[320px] mb-6">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={tradeConstraintPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine={false}>
-                        {tradeConstraintPieData.map((_, i) => <Cell key={i} fill={COLORS[(i + 1) % COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="rounded-md border overflow-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Trade Activity</TableHead>
-                        <TableHead>Constraint</TableHead>
-                        <TableHead>Constraint Category</TableHead>
-                        <TableHead>Date (Day)</TableHead>
-                        <TableHead>Unit</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {constraintRows.map((row, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-medium">{row.tradeActivity}</TableCell>
-                          <TableCell>{row.constraint}</TableCell>
-                          <TableCell>
-                            <span className="px-2 py-1 rounded-full text-xs font-semibold bg-muted text-foreground">{row.constraintCategory}</span>
-                          </TableCell>
-                          <TableCell>{row.date}</TableCell>
-                          <TableCell>{row.unit}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </>
-            );
-          })()}
-        </CardContent>
-      </Card>
-
-      {/* Trade Activity Index - Horizontal Bar Chart */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> Trade Activity Index</CardTitle>
-          <p className="text-sm text-muted-foreground">Total quantity per trade activity, colored by unit type</p>
-        </CardHeader>
-        <CardContent>
-          {(() => {
-            // Aggregate total estimated quantity per trade activity with unit
-            const tradeMap: Record<string, { trade: string; totalQty: number; unit: string }> = {};
-            project.sixWeekPlans.forEach(swp => {
-              swp.weeklyPlans.forEach(wp => {
-                const key = wp.tradeActivity;
-                if (!key) return;
-                if (!tradeMap[key]) {
-                  tradeMap[key] = { trade: key, totalQty: 0, unit: wp.unit || '' };
-                }
-                tradeMap[key].totalQty += wp.estimatedQuantity || 0;
-              });
-            });
-            const tradeIndexData = Object.values(tradeMap).sort((a, b) => b.totalQty - a.totalQty);
-
-            const getUnitColor = (unit: string) => {
-              const u = unit.toUpperCase();
-              if (u === 'SQM') return 'hsl(150, 60%, 45%)';
-              if (u === 'MT') return 'hsl(210, 70%, 50%)';
-              if (u === 'CUBIC') return 'hsl(30, 80%, 55%)';
-              return 'hsl(var(--primary))';
-            };
-
-            if (tradeIndexData.length === 0) {
-              return <p className="text-sm text-muted-foreground">No trade activities found.</p>;
-            }
-
-            const chartHeight = Math.max(300, tradeIndexData.length * 40);
-
-            return (
-              <>
-                <div className="flex gap-4 mb-4 flex-wrap">
-                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(150, 60%, 45%)' }} /> SQM</span>
-                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(210, 70%, 50%)' }} /> MT</span>
-                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(30, 80%, 55%)' }} /> CUBIC</span>
-                  <span className="flex items-center gap-1.5 text-xs"><span className="inline-block w-3 h-3 rounded" style={{ background: 'hsl(var(--primary))' }} /> FLAT / Other</span>
-                </div>
-                <div style={{ height: chartHeight }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={tradeIndexData} layout="vertical" margin={{ left: 120, right: 20, top: 5, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                      <YAxis dataKey="trade" type="category" tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} width={110} />
-                      <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number, _: string, entry: any) => [`${value} ${entry.payload.unit}`, 'Total Qty']} />
-                      <Bar dataKey="totalQty" radius={[0, 4, 4, 0]}>
-                        {tradeIndexData.map((entry, i) => (
-                          <Cell key={i} fill={getUnitColor(entry.unit)} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </>
-            );
-          })()}
-        </CardContent>
-      </Card>
     </div>
   );
 };
