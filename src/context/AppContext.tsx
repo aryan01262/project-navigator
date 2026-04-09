@@ -6,7 +6,6 @@ import { useSupabaseData } from '@/hooks/useSupabaseData';
 
 interface AppContextType {
   role: Role;
-  setRole: (role: Role) => void;
   contractors: Contractor[];
   addContractor: (contractor: Contractor) => void;
   projects: Project[];
@@ -40,12 +39,10 @@ export const useAppContext = () => {
 const STORAGE_KEY = 'sixweek-planner-v2';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const sb = useSupabaseData();
   const [syncing, setSyncing] = useState(false);
   const initialLoadDone = useRef(false);
-
-  const [role, setRole] = useState<Role>('admin');
   const [contractors, setContractors] = useState<Contractor[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY + '-contractors');
     return saved ? JSON.parse(saved) : DEFAULT_CONTRACTORS;
@@ -303,7 +300,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
-      role, setRole, contractors, addContractor,
+      role, contractors, addContractor,
       projects, createProject, activeProjectId, setActiveProjectId,
       addSixWeekPlan, updateSixWeekPlanActivities, addWeeklyPlan, assignToEngineer,
       addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
