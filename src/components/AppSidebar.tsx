@@ -1,6 +1,8 @@
-import { FolderKanban, Users, HardHat } from 'lucide-react';
+import { FolderKanban, Users, HardHat, LogOut } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/button';
 import {
   Sidebar,
   SidebarContent,
@@ -11,6 +13,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarHeader,
+  SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
 
@@ -23,6 +26,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
+  const { user, signOut } = useAuth();
   const isActive = (path: string) => location.pathname === path;
 
   return (
@@ -54,6 +58,15 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="p-3">
+        {!collapsed && user && (
+          <p className="text-xs text-muted-foreground truncate mb-2 px-1">{user.email}</p>
+        )}
+        <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground" onClick={signOut}>
+          <LogOut className="h-4 w-4 mr-2" />
+          {!collapsed && 'Sign Out'}
+        </Button>
+      </SidebarFooter>
     </Sidebar>
   );
 }
