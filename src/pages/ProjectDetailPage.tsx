@@ -204,7 +204,7 @@ if (qtyToAssign > currentRemaining) {
     id: crypto.randomUUID(),
     sixWeekPlanId,
     weekNumber: Number(wpWeek),
-    taskId: `T-${String(existingCount + 1).padStart(3, '0')}`,
+    taskId: wpActivityId,
     category: activity.category,
     contractorId: activity.contractorId,
     tradeActivity: activity.tradeActivity,
