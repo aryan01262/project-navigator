@@ -45,7 +45,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const initialLoadDone = useRef(false);
   const [contractors, setContractors] = useState<Contractor[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY + '-contractors');
-    return saved ? JSON.parse(saved) : DEFAULT_CONTRACTORS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // If stored contractors have non-UUID ids (legacy), use defaults instead
+        if (parsed.length > 0 && parsed[0].id && !/^[0-9a-f]{8}-/.test(parsed[0].id)) {
+          localStorage.removeItem(STORAGE_KEY + '-contractors');
+          return DEFAULT_CONTRACTORS;
+        }
+        return parsed;
+      } catch { return DEFAULT_CONTRACTORS; }
+    }
+    return DEFAULT_CONTRACTORS;
   });
   const [projects, setProjects] = useState<Project[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY + '-projects');
@@ -62,7 +73,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { localStorage.setItem(STORAGE_KEY + '-projects', JSON.stringify(projects)); }, [projects]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY + '-tickets', JSON.stringify(tickets)); }, [tickets]);
 
-  // Load from Supabase on auth
+  // Load from Supabase on auth + seed default contractors
   useEffect(() => {
     if (!user || initialLoadDone.current) return;
     const load = async () => {
@@ -74,8 +85,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           sb.fetchTickets(),
         ]);
         if (sbProjects.length > 0) setProjects(sbProjects);
-        if (sbContractors.length > 0) setContractors(sbContractors);
         if (sbTickets.length > 0) setTickets(sbTickets);
+
+        // Seed default contractors to Supabase if none exist
+        if (sbContractors.length > 0) {
+          setContractors(sbContractors);
+        } else {
+          // Upload default contractors to Supabase
+          const contractorsToSeed = contractors;
+          for (const c of contractorsToSeed) {
+            await sb.upsertContractor(c, user.id).catch(console.error);
+          }
+        }
+
         initialLoadDone.current = true;
       } catch (e) {
         console.error('Failed to load from Supabase, using localStorage:', e);

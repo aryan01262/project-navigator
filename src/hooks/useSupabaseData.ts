@@ -2,6 +2,12 @@ import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Project, SixWeekPlan, PlanActivity, WeeklyPlan, DailyPlan, Contractor, Ticket } from '@/types/planner';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const toUuidOrNull = (val: string | undefined | null): string | null => {
+  if (!val) return null;
+  return UUID_REGEX.test(val) ? val : null;
+};
+
 // Helper to convert DB row to app type
 const toProject = (row: any): Project => ({
   id: row.id,
@@ -184,7 +190,7 @@ export const useSupabaseData = () => {
       id: activity.id,
       six_week_plan_id: sixWeekPlanId,
       category: activity.category,
-      contractor_id: activity.contractorId || null,
+      contractor_id: toUuidOrNull(activity.contractorId),
       trade: activity.trade,
       trade_activity: activity.tradeActivity,
       unit: activity.unit,
@@ -198,10 +204,10 @@ export const useSupabaseData = () => {
     await supabase.from('weekly_plans').upsert({
       id: wp.id,
       six_week_plan_id: wp.sixWeekPlanId,
-      task_id: wp.taskId || null,
+      task_id: toUuidOrNull(wp.taskId),
       week_number: wp.weekNumber,
       category: wp.category,
-      contractor_id: wp.contractorId || null,
+      contractor_id: toUuidOrNull(wp.contractorId),
       trade_activity: wp.tradeActivity,
       unit: wp.unit,
       estimated_quantity: wp.estimatedQuantity,
