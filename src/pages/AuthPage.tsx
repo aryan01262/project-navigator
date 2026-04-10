@@ -37,8 +37,8 @@ const AuthPage = () => {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">6-Week Planner</CardTitle>
-          <CardDescription>Construction planning & tracking</CardDescription>
+          <CardTitle className="text-2xl">Kakoli</CardTitle>
+          <CardDescription>Construction Execution Intellligence</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="signin">
