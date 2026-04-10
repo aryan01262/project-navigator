@@ -221,16 +221,16 @@ export const constraintCategories = [
   { category: "ENVIRONMENT / SITE", reason: "On-site conditions" }
 ];
 export const DEFAULT_CONTRACTORS: Contractor[] = [
-  { id: '1', name: 'Adhiraj Construction', specialization: 'Structural' },
-  { id: '2', name: 'Skyline Builders', specialization: 'MEP' },
-  { id: '3', name: 'Prime Infrastructure', specialization: 'Civil' },
-  { id: '4', name: 'Apex Engineering Co.', specialization: 'Structural' },
-  { id: '5', name: 'Metro Constructions', specialization: 'Finishing' },
-  { id: '6', name: 'Pinnacle Works Pvt Ltd', specialization: 'Interior' },
-  { id: '7', name: 'Greenfield Projects', specialization: 'Landscaping' },
-  { id: '8', name: 'United MEP Solutions', specialization: 'MEP' },
-  { id: '9', name: 'Reliable Waterproofing Co.', specialization: 'Waterproofing' },
-  { id: '10', name: 'Bharat Electrical Works', specialization: 'MEP' },
-  { id: '11', name: 'Singh & Sons Civil', specialization: 'Civil' },
-  { id: '12', name: 'Royal Interiors Group', specialization: 'Interior' },
+  { id: 'a0000000-0000-0000-0000-000000000001', name: 'Adhiraj Construction', specialization: 'Structural' },
+  { id: 'a0000000-0000-0000-0000-000000000002', name: 'Skyline Builders', specialization: 'MEP' },
+  { id: 'a0000000-0000-0000-0000-000000000003', name: 'Prime Infrastructure', specialization: 'Civil' },
+  { id: 'a0000000-0000-0000-0000-000000000004', name: 'Apex Engineering Co.', specialization: 'Structural' },
+  { id: 'a0000000-0000-0000-0000-000000000005', name: 'Metro Constructions', specialization: 'Finishing' },
+  { id: 'a0000000-0000-0000-0000-000000000006', name: 'Pinnacle Works Pvt Ltd', specialization: 'Interior' },
+  { id: 'a0000000-0000-0000-0000-000000000007', name: 'Greenfield Projects', specialization: 'Landscaping' },
+  { id: 'a0000000-0000-0000-0000-000000000008', name: 'United MEP Solutions', specialization: 'MEP' },
+  { id: 'a0000000-0000-0000-0000-000000000009', name: 'Reliable Waterproofing Co.', specialization: 'Waterproofing' },
+  { id: 'a0000000-0000-0000-0000-000000000010', name: 'Bharat Electrical Works', specialization: 'MEP' },
+  { id: 'a0000000-0000-0000-0000-000000000011', name: 'Singh & Sons Civil', specialization: 'Civil' },
+  { id: 'a0000000-0000-0000-0000-000000000012', name: 'Royal Interiors Group', specialization: 'Interior' },
 ];
