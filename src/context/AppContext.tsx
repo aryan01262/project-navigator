@@ -62,7 +62,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { localStorage.setItem(STORAGE_KEY + '-projects', JSON.stringify(projects)); }, [projects]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY + '-tickets', JSON.stringify(tickets)); }, [tickets]);
 
-  // Load from Supabase on auth
+  // Load from Supabase on auth + seed default contractors
   useEffect(() => {
     if (!user || initialLoadDone.current) return;
     const load = async () => {
@@ -74,8 +74,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           sb.fetchTickets(),
         ]);
         if (sbProjects.length > 0) setProjects(sbProjects);
-        if (sbContractors.length > 0) setContractors(sbContractors);
         if (sbTickets.length > 0) setTickets(sbTickets);
+
+        // Seed default contractors to Supabase if none exist
+        if (sbContractors.length > 0) {
+          setContractors(sbContractors);
+        } else {
+          // Upload default contractors to Supabase
+          const contractorsToSeed = contractors;
+          for (const c of contractorsToSeed) {
+            await sb.upsertContractor(c, user.id).catch(console.error);
+          }
+        }
+
         initialLoadDone.current = true;
       } catch (e) {
         console.error('Failed to load from Supabase, using localStorage:', e);
