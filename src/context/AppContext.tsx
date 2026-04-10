@@ -45,7 +45,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const initialLoadDone = useRef(false);
   const [contractors, setContractors] = useState<Contractor[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY + '-contractors');
-    return saved ? JSON.parse(saved) : DEFAULT_CONTRACTORS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // If stored contractors have non-UUID ids (legacy), use defaults instead
+        if (parsed.length > 0 && parsed[0].id && !/^[0-9a-f]{8}-/.test(parsed[0].id)) {
+          localStorage.removeItem(STORAGE_KEY + '-contractors');
+          return DEFAULT_CONTRACTORS;
+        }
+        return parsed;
+      } catch { return DEFAULT_CONTRACTORS; }
+    }
+    return DEFAULT_CONTRACTORS;
   });
   const [projects, setProjects] = useState<Project[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY + '-projects');
