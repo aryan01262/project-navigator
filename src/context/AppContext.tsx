@@ -153,9 +153,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addSixWeekPlan = useCallback((projectId: string, plan: SixWeekPlan) => {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, sixWeekPlans: [...p.sixWeekPlans, plan] } : p));
-    syncSixWeekPlan(plan);
-    plan.activities.forEach(a => syncActivity(a, plan.id));
-  }, [syncSixWeekPlan, syncActivity]);
+    // Must await six_week_plan insert before inserting activities (FK dependency)
+    if (user) {
+      sb.upsertSixWeekPlan(plan)
+        .then(() => Promise.all(plan.activities.map(a => sb.upsertActivity(a, plan.id))))
+        .catch(console.error);
+    }
+  }, [user, sb]);
 
   const updateSixWeekPlanActivities = useCallback(
     (projectId: string, sixWeekPlanId: string, activities: PlanActivity[]) => {
