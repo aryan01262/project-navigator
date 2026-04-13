@@ -161,6 +161,9 @@ export const FLOOR_UNITS = [
   '1st Floor', '2nd Floor', '3rd Floor', '4th Floor', '5th Floor',
   '6th Floor', '7th Floor', '8th Floor', '9th Floor', '10th Floor',
   '11th Floor', '12th Floor', '13th Floor', '14th Floor', '15th Floor',
+  '16th Floor', '17th Floor', '18th Floor', '19th Floor', '20th Floor',
+  '21th Floor', '22th Floor', '23th Floor', '24th Floor', '25th Floor',
+  '26th Floor', '27th Floor', '28th Floor', '29th Floor', '30th Floor',
   'Terrace', 'Roof',
 ];
 
@@ -221,16 +224,5 @@ export const constraintCategories = [
   { category: "ENVIRONMENT / SITE", reason: "On-site conditions" }
 ];
 export const DEFAULT_CONTRACTORS: Contractor[] = [
-  { id: 'a0000000-0000-0000-0000-000000000001', name: 'Adhiraj Construction', specialization: 'Structural' },
-  { id: 'a0000000-0000-0000-0000-000000000002', name: 'Skyline Builders', specialization: 'MEP' },
-  { id: 'a0000000-0000-0000-0000-000000000003', name: 'Prime Infrastructure', specialization: 'Civil' },
-  { id: 'a0000000-0000-0000-0000-000000000004', name: 'Apex Engineering Co.', specialization: 'Structural' },
-  { id: 'a0000000-0000-0000-0000-000000000005', name: 'Metro Constructions', specialization: 'Finishing' },
-  { id: 'a0000000-0000-0000-0000-000000000006', name: 'Pinnacle Works Pvt Ltd', specialization: 'Interior' },
-  { id: 'a0000000-0000-0000-0000-000000000007', name: 'Greenfield Projects', specialization: 'Landscaping' },
-  { id: 'a0000000-0000-0000-0000-000000000008', name: 'United MEP Solutions', specialization: 'MEP' },
-  { id: 'a0000000-0000-0000-0000-000000000009', name: 'Reliable Waterproofing Co.', specialization: 'Waterproofing' },
-  { id: 'a0000000-0000-0000-0000-000000000010', name: 'Bharat Electrical Works', specialization: 'MEP' },
-  { id: 'a0000000-0000-0000-0000-000000000011', name: 'Singh & Sons Civil', specialization: 'Civil' },
-  { id: 'a0000000-0000-0000-0000-000000000012', name: 'Royal Interiors Group', specialization: 'Interior' },
+
 ];
