@@ -464,7 +464,7 @@ console.log(selectedActivity)
                         </div>
                         <div>
                           <Label className="text-xs">Est. Quantity</Label>
-                          <Input type="number" className="mt-1" value={editData.estimatedQuantity} onChange={e => setEditData({ ...editData, estimatedQuantity: Number(e.target.value) })} />
+                          <Input type='number'   step="any"  className="mt-1" value={editData.estimatedQuantity} onChange={e => setEditData({ ...editData, estimatedQuantity: Number(e.target.value) })} />
                         </div>
                         <div>
                           <Label className="text-xs">Floor Units</Label>
@@ -1032,7 +1032,7 @@ console.log(selectedActivity)
                     </div>
                     <div>
                       <Label className="text-xs">Est. Quantity</Label>
-                      <Input type="number" value={planActivities[editingActivityIdx].estimatedQuantity || ''} onChange={e => updateActivity(editingActivityIdx, 'estimatedQuantity', Number(e.target.value))} placeholder="500" className="mt-1" />
+                      <Input type="number"   step="any"  value={planActivities[editingActivityIdx].estimatedQuantity || ''} onChange={e => updateActivity(editingActivityIdx, 'estimatedQuantity', Number(e.target.value))} placeholder="500" className="mt-1" />
                     </div>
                     <div>
                       <Label className="text-xs">Floor Units</Label>
@@ -1159,6 +1159,7 @@ console.log(selectedActivity)
                 <Label>Est. Quantity</Label>
              <Input
   type="number"
+    step="any" 
   value={wpEstQty}
   onChange={e => {
     const value = Number(e.target.value);
@@ -1302,6 +1303,7 @@ console.log(selectedActivity)
 
   <Input
     type="number"
+      step="any" 
     value={dpQty}
     min={1}
     max={maxAllowedQty}
