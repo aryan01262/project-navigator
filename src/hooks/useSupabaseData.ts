@@ -34,6 +34,8 @@ const toActivity = (row: any): PlanActivity => ({
   estimatedQuantity: Number(row.estimated_quantity),
   floorUnits: row.floor_units || [],
   remainingQuantity: Number(row.remaining_quantity),
+  completedQuantity: row.completed_quantity != null ? Number(row.completed_quantity) : undefined,
+  carryForwardQuantity: row.carry_forward_quantity != null ? Number(row.carry_forward_quantity) : undefined,
 });
 
 const toWeeklyPlan = (row: any, dailyPlans: DailyPlan[]): WeeklyPlan => ({
@@ -46,12 +48,18 @@ const toWeeklyPlan = (row: any, dailyPlans: DailyPlan[]): WeeklyPlan => ({
   tradeActivity: row.trade_activity,
   unit: row.unit,
   estimatedQuantity: Number(row.estimated_quantity),
+  completedQuantity: row.completed_quantity != null ? Number(row.completed_quantity) : undefined,
   floorUnits: row.floor_units || [],
   constraint: row.constraint_text,
   status: row.status,
   assignedToEngineer: row.assigned_to_engineer,
   remainingQuantity: Number(row.remaining_quantity),
   dailyPlans,
+  isCarryForwardWeek: !!row.is_carry_forward_week,
+  sourceActivityId: row.source_activity_id || undefined,
+  sourceWeekNumber: row.source_week_number != null ? Number(row.source_week_number) : undefined,
+  constraintDate: row.constraint_date || undefined,
+responsiblePerson: row.responsible_person || undefined,
 });
 
 const toDailyPlan = (row: any): DailyPlan => ({
@@ -73,6 +81,8 @@ const toDailyPlan = (row: any): DailyPlan => ({
   validatedByEngineer: row.validated_by_engineer,
   confirmedByAdmin: row.confirmed_by_admin,
   status: row.status,
+  constraintDate: row.constraint_date || undefined,
+responsiblePerson: row.responsible_person || undefined,
 });
 
 const toTicket = (row: any): Ticket => ({
@@ -117,17 +127,23 @@ export const useSupabaseData = () => {
         weeklyPlans.push(toWeeklyPlan(wp, (dps || []).map(toDailyPlan)));
       }
 
-      project.sixWeekPlans.push({
-        id: swp.id,
-        projectId: swp.project_id,
-        name: swp.name,
-        buildingName: swp.building_name,
-        activities: (acts || []).map(toActivity),
-        startDate: swp.start_date,
-        endDate: swp.end_date,
-        createdAt: swp.created_at,
-        weeklyPlans,
-      });
+     project.sixWeekPlans.push({
+  id: swp.id,
+  projectId: swp.project_id,
+  name: swp.name,
+  buildingName: swp.building_name,
+  baseDurationWeeks: swp.base_duration_weeks ?? 6,
+  extendedWeeks: swp.extended_weeks ?? 0,
+  totalDurationWeeks: swp.total_duration_weeks ?? 6,
+  carryForwardAvailable: !!swp.carry_forward_available,
+  carryForwardCreatedUntilWeek: swp.carry_forward_created_until_week ?? 6,
+  activities: (acts || []).map(toActivity),
+  startDate: swp.start_date,
+  endDate: swp.end_date,
+  createdAt: swp.created_at,
+  weeklyPlans,
+  planType: swp.plan_type ?? 'six-week',
+});
     }
     return project;
   }, []);
@@ -174,50 +190,66 @@ export const useSupabaseData = () => {
     });
   }, []);
 
-  const upsertSixWeekPlan = useCallback(async (plan: SixWeekPlan) => {
-    await supabase.from('six_week_plans').upsert({
-      id: plan.id,
-      project_id: plan.projectId,
-      name: plan.name,
-      building_name: plan.buildingName,
-      start_date: plan.startDate,
-      end_date: plan.endDate,
-    });
-  }, []);
+ const upsertSixWeekPlan = useCallback(async (plan: SixWeekPlan) => {
+  await supabase.from('six_week_plans').upsert({
+    id: plan.id,
+    project_id: plan.projectId,
+    name: plan.name,
+    building_name: plan.buildingName,
+    start_date: plan.startDate,
+    end_date: plan.endDate,
+    base_duration_weeks: plan.baseDurationWeeks ?? 6,
+    extended_weeks: plan.extendedWeeks ?? 0,
+    total_duration_weeks: plan.totalDurationWeeks ?? 6,
+    carry_forward_available: plan.carryForwardAvailable ?? false,
+    carry_forward_created_until_week: plan.carryForwardCreatedUntilWeek ?? 6,
+    plan_type: plan.planType ?? 'six-week',
+  });
+}, []);
 
-  const upsertActivity = useCallback(async (activity: PlanActivity, sixWeekPlanId: string) => {
-    await supabase.from('plan_activities').upsert({
-      id: activity.id,
-      six_week_plan_id: sixWeekPlanId,
-      category: activity.category,
-      contractor_id: toUuidOrNull(activity.contractorId),
-      trade: activity.trade,
-      trade_activity: activity.tradeActivity,
-      unit: activity.unit,
-      estimated_quantity: activity.estimatedQuantity,
-      floor_units: activity.floorUnits,
-      remaining_quantity: activity.remainingQuantity,
-    });
-  }, []);
 
-  const upsertWeeklyPlan = useCallback(async (wp: WeeklyPlan) => {
-    await supabase.from('weekly_plans').upsert({
-      id: wp.id,
-      six_week_plan_id: wp.sixWeekPlanId,
-      task_id: toUuidOrNull(wp.taskId),
-      week_number: wp.weekNumber,
-      category: wp.category,
-      contractor_id: toUuidOrNull(wp.contractorId),
-      trade_activity: wp.tradeActivity,
-      unit: wp.unit,
-      estimated_quantity: wp.estimatedQuantity,
-      floor_units: wp.floorUnits,
-      constraint_text: wp.constraint,
-      status: wp.status,
-      assigned_to_engineer: wp.assignedToEngineer,
-      remaining_quantity: wp.remainingQuantity,
-    });
-  }, []);
+
+ const upsertActivity = useCallback(async (activity: PlanActivity, sixWeekPlanId: string) => {
+  await supabase.from('plan_activities').upsert({
+    id: activity.id,
+    six_week_plan_id: sixWeekPlanId,
+    category: activity.category,
+    contractor_id: toUuidOrNull(activity.contractorId),
+    trade: activity.trade,
+    trade_activity: activity.tradeActivity,
+    unit: activity.unit,
+    estimated_quantity: activity.estimatedQuantity,
+    floor_units: activity.floorUnits,
+    remaining_quantity: activity.remainingQuantity,
+    completed_quantity: activity.completedQuantity ?? null,
+    carry_forward_quantity: activity.carryForwardQuantity ?? null,
+  });
+}, []);
+
+const upsertWeeklyPlan = useCallback(async (wp: WeeklyPlan) => {
+  await supabase.from('weekly_plans').upsert({
+    id: wp.id,
+    six_week_plan_id: wp.sixWeekPlanId,
+    task_id: toUuidOrNull(wp.taskId),
+    week_number: wp.weekNumber,
+    category: wp.category,
+    contractor_id: toUuidOrNull(wp.contractorId),
+    trade_activity: wp.tradeActivity,
+    unit: wp.unit,
+    estimated_quantity: wp.estimatedQuantity,
+    completed_quantity: wp.completedQuantity ?? null,
+    floor_units: wp.floorUnits,
+    constraint_text: wp.constraint,
+    status: wp.status,
+    assigned_to_engineer: wp.assignedToEngineer,
+    remaining_quantity: wp.remainingQuantity,
+    is_carry_forward_week: wp.isCarryForwardWeek ?? false,
+    source_activity_id: toUuidOrNull(wp.sourceActivityId),
+    source_week_number: wp.sourceWeekNumber ?? null,
+    constraint_date: wp.constraintDate ?? null,
+responsible_person: wp.responsiblePerson ?? null,
+  });
+}, []);
 
   const upsertDailyPlan = useCallback(async (dp: DailyPlan) => {
     await supabase.from('daily_plans').upsert({
@@ -239,6 +271,8 @@ export const useSupabaseData = () => {
       validated_by_engineer: dp.validatedByEngineer,
       confirmed_by_admin: dp.confirmedByAdmin,
       status: dp.status,
+      constraint_date: dp.constraintDate ?? null,
+responsible_person: dp.responsiblePerson ?? null,
     });
   }, []);
 

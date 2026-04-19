@@ -25,6 +25,17 @@ interface AppContextType {
   updateActivity2: (projectId: string, sixWeekPlanId: string, activityId: string, patch: Partial<PlanActivity>) => void;
   updateWeeklyPlanField: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, patch: Partial<WeeklyPlan>) => void;
   updateTicket: (ticketId: string, patch: Partial<Ticket>) => void;
+
+  // NEW
+  evaluateCarryForward: (projectId: string, sixWeekPlanId: string) => void;
+  createNextCarryForwardWeek: (projectId: string, sixWeekPlanId: string) => void;
+  updateCarryForwardWeek: (
+    projectId: string,
+    sixWeekPlanId: string,
+    weeklyPlanId: string,
+    patch: Partial<WeeklyPlan>
+  ) => void;
+
   syncing: boolean;
 }
 
@@ -138,7 +149,257 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sb.upsertTicket(ticket).catch(console.error);
   }, [user, sb]);
 
+  const getWeeklyPlanCompletedQuantity = (wp: WeeklyPlan) =>
+  wp.dailyPlans.reduce((sum, dp) => sum + (dp.completedQuantity || 0), 0);
+
+const isOriginalSixWeekCycleComplete = (plan: SixWeekPlan) => {
+  const originalWeeks = plan.weeklyPlans.filter(w => w.weekNumber <= 6);
+  if (originalWeeks.length === 0) return false;
+
+  return originalWeeks.every(wp =>
+    wp.dailyPlans.length > 0 &&
+    wp.dailyPlans.every(dp => dp.status === 'confirmed')
+  );
+};
+
+const recalculatePlanActivities = (plan: SixWeekPlan): PlanActivity[] => {
+  return plan.activities.map(activity => {
+    const relatedWeeks = plan.weeklyPlans.filter(wp => wp.taskId === activity.id);
+
+    const completedQuantity = relatedWeeks.reduce(
+      (sum, wp) => sum + getWeeklyPlanCompletedQuantity(wp),
+      0
+    );
+
+    const remainingQuantity = Math.max(0, activity.estimatedQuantity - completedQuantity);
+
+    return {
+      ...activity,
+      completedQuantity,
+      remainingQuantity,
+      carryForwardQuantity: remainingQuantity,
+    } as PlanActivity;
+  });
+};
+
+const buildCarryForwardWeeklyPlan = (
+  plan: SixWeekPlan,
+  activity: PlanActivity,
+  nextWeekNumber: number
+): WeeklyPlan => ({
+  id: crypto.randomUUID(),
+  sixWeekPlanId: plan.id,
+  weekNumber: nextWeekNumber,
+  taskId: activity.id,
+  category: activity.category,
+  contractorId: activity.contractorId,
+  tradeActivity: activity.tradeActivity,
+  unit: activity.unit,
+  estimatedQuantity: activity.remainingQuantity || 0,
+  completedQuantity: 0,
+  floorUnits: activity.floorUnits,
+  constraint: '',
+  status: 'pending',
+  assignedToEngineer: false,
+  remainingQuantity: activity.remainingQuantity || 0,
+  dailyPlans: [],
+  isCarryForwardWeek: true,
+  sourceActivityId: activity.id,
+  sourceWeekNumber: nextWeekNumber - 1,
+} as WeeklyPlan);
+
+const evaluateCarryForward = useCallback((projectId: string, sixWeekPlanId: string) => {
+  let updatedPlanForSync: SixWeekPlan | null = null;
+  let updatedActivitiesForSync: PlanActivity[] = [];
+
+  setProjects(prev =>
+    prev.map(project => {
+      if (project.id !== projectId) return project;
+
+      return {
+        ...project,
+        sixWeekPlans: project.sixWeekPlans.map(plan => {
+          if (plan.id !== sixWeekPlanId) return plan;
+
+          const totalWeeks = plan.totalDurationWeeks || 6;
+          const currentCycleWeeks =
+            totalWeeks <= 6
+              ? plan.weeklyPlans.filter(w => w.weekNumber <= 6)
+              : plan.weeklyPlans.filter(w => w.weekNumber === totalWeeks);
+
+          if (currentCycleWeeks.length === 0) return plan;
+
+          const cycleComplete = currentCycleWeeks.every(wp =>
+            wp.dailyPlans.length > 0 &&
+            wp.dailyPlans.every(dp => dp.status === 'confirmed')
+          );
+
+          if (!cycleComplete) return plan;
+
+          const recalculatedActivities = recalculatePlanActivities(plan);
+          const hasCarryForward = recalculatedActivities.some(
+            a => (a.remainingQuantity || 0) > 0
+          );
+
+          const updatedPlan = {
+            ...plan,
+            activities: recalculatedActivities,
+            carryForwardAvailable: hasCarryForward && totalWeeks < 9,
+          } as SixWeekPlan;
+
+          updatedPlanForSync = updatedPlan;
+          updatedActivitiesForSync = recalculatedActivities;
+
+          return updatedPlan;
+        })
+      };
+    })
+  );
+
+  if (updatedPlanForSync) {
+    syncSixWeekPlan(updatedPlanForSync);
+    updatedActivitiesForSync.forEach(a => syncActivity(a, sixWeekPlanId));
+  }
+}, [syncSixWeekPlan, syncActivity]);
+
+  const updateCarryForwardWeek = useCallback((
+  projectId: string,
+  sixWeekPlanId: string,
+  weeklyPlanId: string,
+  patch: Partial<WeeklyPlan>
+) => {
+  setProjects(prev => prev.map(project => {
+    if (project.id !== projectId) return project;
+
+    return {
+      ...project,
+      sixWeekPlans: project.sixWeekPlans.map(plan => {
+        if (plan.id !== sixWeekPlanId) return plan;
+
+        const updatedWeeklyPlans = plan.weeklyPlans.map(wp => {
+          if (wp.id !== weeklyPlanId) return wp;
+          if (!wp.isCarryForwardWeek) return wp;
+
+          const updated: WeeklyPlan = {
+            ...wp,
+            ...patch,
+            weekNumber: wp.weekNumber, // protect
+          };
+
+          syncWeeklyPlan(updated);
+          return updated;
+        });
+
+        return {
+          ...plan,
+          weeklyPlans: updatedWeeklyPlans
+        };
+      })
+    };
+  }));
+}, [syncWeeklyPlan]);
+const recalculateActivityFromWeeks = (
+  activity: PlanActivity,
+  weeklyPlans: WeeklyPlan[]
+): PlanActivity => {
+  const totalPlannedAcrossWeeks = weeklyPlans
+    .filter(w => w.taskId === activity.id)
+    .reduce((sum, w) => sum + (w.estimatedQuantity || 0), 0);
+
+  const totalCompletedAcrossWeeks = weeklyPlans
+    .filter(w => w.taskId === activity.id)
+    .reduce((sum, w) => sum + (w.completedQuantity || 0), 0);
+
+  return {
+    ...activity,
+    completedQuantity: totalCompletedAcrossWeeks,
+    remainingQuantity: Math.max(0, activity.estimatedQuantity - totalCompletedAcrossWeeks),
+    carryForwardQuantity: Math.max(0, totalPlannedAcrossWeeks - totalCompletedAcrossWeeks),
+  };
+};
+function getUnallocatedCarryForward(
+  activity: PlanActivity,
+  weeklyPlans: WeeklyPlan[]
+) {
+  const carryForwardWeeks = weeklyPlans.filter(
+    w => w.taskId === activity.id && w.isCarryForwardWeek
+  );
+
+  const allocated = carryForwardWeeks.reduce(
+    (sum, w) => sum + (w.estimatedQuantity || 0),
+    0
+  );
+
+  const completed = weeklyPlans
+    .filter(w => w.taskId === activity.id)
+    .reduce((sum, w) => sum + (w.completedQuantity || 0), 0);
+
+  const actualRemaining = Math.max(0, activity.estimatedQuantity - completed);
+
+  return Math.max(0, actualRemaining - allocated);
+}
   // --- Original logic with sync calls ---
+const createNextCarryForwardWeek = useCallback((projectId: string, sixWeekPlanId: string) => {
+  let updatedPlanForSync: SixWeekPlan | null = null;
+  let newWeeklyPlansForSync: WeeklyPlan[] = [];
+
+  setProjects(prev =>
+    prev.map(project => {
+      if (project.id !== projectId) return project;
+
+      return {
+        ...project,
+        sixWeekPlans: project.sixWeekPlans.map(plan => {
+          if (plan.id !== sixWeekPlanId) return plan;
+          if (!plan.carryForwardAvailable) return plan;
+
+          const currentTotalWeeks = plan.totalDurationWeeks || 6;
+          if (currentTotalWeeks >= 9) return plan;
+
+          const nextWeekNumber = currentTotalWeeks + 1;
+          const recalculatedActivities = recalculatePlanActivities(plan);
+
+          const carryForwardActivities = recalculatedActivities.filter(
+            a => (a.remainingQuantity || 0) > 0
+          );
+
+          if (carryForwardActivities.length === 0) {
+            const noCarryForwardPlan = {
+              ...plan,
+              activities: recalculatedActivities,
+              carryForwardAvailable: false,
+            } as SixWeekPlan;
+
+            updatedPlanForSync = noCarryForwardPlan;
+            return noCarryForwardPlan;
+          }
+
+          const newWeeklyPlans = carryForwardActivities.map(activity =>
+            buildCarryForwardWeeklyPlan(plan, activity, nextWeekNumber)
+          );
+
+          const updatedPlan = {
+            ...plan,
+            activities: recalculatedActivities,
+            weeklyPlans: [...plan.weeklyPlans, ...newWeeklyPlans],
+            extendedWeeks: nextWeekNumber - 6,
+            totalDurationWeeks: nextWeekNumber,
+            carryForwardAvailable: false,
+            carryForwardCreatedUntilWeek: nextWeekNumber,
+          } as SixWeekPlan;
+
+          updatedPlanForSync = updatedPlan;
+          newWeeklyPlansForSync = newWeeklyPlans;
+
+          return updatedPlan;
+        })
+      };
+    })
+  );
+
+  if (updatedPlanForSync) syncSixWeekPlan(updatedPlanForSync);
+  newWeeklyPlansForSync.forEach(wp => syncWeeklyPlan(wp));
+}, [syncSixWeekPlan, syncWeeklyPlan]);
 
   const addContractor = useCallback((c: Contractor) => {
     setContractors(prev => [...prev, c]);
@@ -151,15 +412,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncProject(p);
   }, [syncProject]);
 
-  const addSixWeekPlan = useCallback((projectId: string, plan: SixWeekPlan) => {
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, sixWeekPlans: [...p.sixWeekPlans, plan] } : p));
-    // Must await six_week_plan insert before inserting activities (FK dependency)
-    if (user) {
-      sb.upsertSixWeekPlan(plan)
-        .then(() => Promise.all(plan.activities.map(a => sb.upsertActivity(a, plan.id))))
-        .catch(console.error);
-    }
-  }, [user, sb]);
+
+
+const addSixWeekPlan = useCallback((projectId: string, plan: SixWeekPlan) => {
+  const normalizedPlan: SixWeekPlan = {
+    ...plan,
+    baseDurationWeeks: plan.baseDurationWeeks ?? 6,
+    extendedWeeks: plan.extendedWeeks ?? 0,
+    totalDurationWeeks: plan.totalDurationWeeks ?? 6,
+    carryForwardAvailable: false,
+    carryForwardCreatedUntilWeek: 6,
+  } as SixWeekPlan;
+
+  setProjects(prev =>
+    prev.map(p =>
+      p.id === projectId
+        ? { ...p, sixWeekPlans: [...p.sixWeekPlans, normalizedPlan] }
+        : p
+    )
+  );
+
+  if (user) {
+    sb.upsertSixWeekPlan(normalizedPlan)
+      .then(() => Promise.all(normalizedPlan.activities.map(a => sb.upsertActivity(a, normalizedPlan.id))))
+      .catch(console.error);
+  }
+}, [user, sb]);
 
   const updateSixWeekPlanActivities = useCallback(
     (projectId: string, sixWeekPlanId: string, activities: PlanActivity[]) => {
@@ -206,9 +484,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (updatedWP) syncWeeklyPlan(updatedWP);
   }, [syncWeeklyPlan]);
 
-  const updateWeeklyPlanField = useCallback((projectId: string, sixWeekPlanId: string, weeklyPlanId: string, patch: Partial<WeeklyPlan>) => {
-    updateWeeklyPlan(projectId, sixWeekPlanId, weeklyPlanId, wp => ({ ...wp, ...patch }));
-  }, [updateWeeklyPlan]);
+const updateWeeklyPlanField = useCallback((
+  projectId: string,
+  sixWeekPlanId: string,
+  weeklyPlanId: string,
+  patch: Partial<WeeklyPlan>
+) => {
+  updateWeeklyPlan(projectId, sixWeekPlanId, weeklyPlanId, wp => ({ ...wp, ...patch }));
+}, [updateWeeklyPlan]);
 
   const updateActivity2 = useCallback((projectId: string, sixWeekPlanId: string, activityId: string, patch: Partial<PlanActivity>) => {
     setProjects(prev => prev.map(p => p.id !== projectId ? p : {
@@ -284,9 +567,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateDailyPlan(pid, swpId, wpId, dpId, dp => ({ ...dp, status: 'submitted', constraintLog, validatedByEngineer: true }));
   }, [updateDailyPlan]);
 
-  const confirmDailyTarget = useCallback((pid: string, swpId: string, wpId: string, dpId: string) => {
-    updateDailyPlan(pid, swpId, wpId, dpId, dp => ({ ...dp, status: 'confirmed', confirmedByAdmin: true }));
-  }, [updateDailyPlan]);
+const confirmDailyTarget = useCallback((pid: string, swpId: string, wpId: string, dpId: string) => {
+  updateDailyPlan(pid, swpId, wpId, dpId, dp => ({
+    ...dp,
+    status: 'confirmed',
+    confirmedByAdmin: true
+  }));
+
+  setTimeout(() => {
+    evaluateCarryForward(pid, swpId);
+  }, 0);
+}, [updateDailyPlan, evaluateCarryForward]);
 
   const createTicketFromShortfall = (project: Project, swpId: string, wpId: string, dp: DailyPlan, completedQuantity: number, rov: string, wp: WeeklyPlan) => {
     const shortfall = dp.plannedQuantity - completedQuantity;
@@ -325,13 +616,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [syncTicket]);
 
   return (
-    <AppContext.Provider value={{
-      role, contractors, addContractor,
-      projects, createProject, activeProjectId, setActiveProjectId,
-      addSixWeekPlan, updateSixWeekPlanActivities, addWeeklyPlan, assignToEngineer,
-      addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
-      tickets, updateActivity2, updateWeeklyPlanField, updateTicket, syncing
-    }}>
+   <AppContext.Provider value={{
+  role, contractors, addContractor,
+  projects, createProject, activeProjectId, setActiveProjectId,
+  addSixWeekPlan, updateSixWeekPlanActivities, addWeeklyPlan, assignToEngineer,
+  addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
+  tickets, updateActivity2, updateWeeklyPlanField, updateTicket,
+  evaluateCarryForward, createNextCarryForwardWeek, updateCarryForwardWeek,
+  syncing
+}}>
       {children}
     </AppContext.Provider>
   );

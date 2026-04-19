@@ -15,6 +15,41 @@ export interface Project {
   sixWeekPlans: SixWeekPlan[];
 }
 
+// export interface PlanActivity {
+//   id: string;
+//   category: string;
+//   contractorId: string;
+//   trade: string;
+//   tradeActivity: string;
+//   unit: string;
+
+//   estimatedQuantity: number;   // total planned (4000)
+//   completedQuantity?: number;  // NEW → actual done (3000)
+//   remainingQuantity: number;   // already exists (1000)
+
+//   // NEW
+//   carryForwardQuantity?: number;  
+//   parentActivityId?: string;   // for carry-forward child
+//   isCarryForward?: boolean;
+
+//   floorUnits: string[];
+// }
+
+// export interface SixWeekPlan {
+//   id: string;
+//   projectId: string;
+//   name: string;
+//   buildingName: string;
+//   baseDurationWeeks: 6;        // original plan duration
+//   extendedWeeks?: number;      // 0, 1, 2, 3 => makes it 6,7,8,9 weeks
+//   totalDurationWeeks: number;  // 6 + extendedWeeks
+//   activities: PlanActivity[];
+//   startDate: string;
+//   endDate: string;
+//   createdAt: string;
+//   weeklyPlans: WeeklyPlan[];
+// }
+
 export interface PlanActivity {
   id: string;
   category: string;
@@ -25,43 +60,72 @@ export interface PlanActivity {
   estimatedQuantity: number;
   floorUnits: string[];
   remainingQuantity: number;
-}
 
+  completedQuantity?: number;       // NEW
+  carryForwardQuantity?: number;    // NEW
+}
 export interface SixWeekPlan {
   id: string;
   projectId: string;
   name: string;
   buildingName: string;
+  baseDurationWeeks: 6;
+  extendedWeeks?: number;
+  totalDurationWeeks: number;
   activities: PlanActivity[];
   startDate: string;
   endDate: string;
   createdAt: string;
   weeklyPlans: WeeklyPlan[];
+
+  planType?: 'six-week' | 'new-plan';
 }
 
 export interface DailyPlan {
   id: string;
   weeklyPlanId: string;
-  dayNumber: number; // 1-7 (Mon-Sun)
+  dayNumber: number;
   date: string;
   plannedQuantity: number;
   unit: string;
   constraint: string;
+
+  // NEW
+constraintDate?: string;
+responsiblePerson?: string;
   floorUnits: string[];
   engineerNote?: string;
   rov?: string;
-  // Supervisor fields
   completedQuantity?: number;
   remainingQuantity? : number;
   isDone?: boolean;
   supervisorNote?: string;
-  // Engineer validation
   constraintLog?: string;
   validatedByEngineer?: boolean;
-  // Admin confirmation
   confirmedByAdmin?: boolean;
   status: 'pending' | 'assigned' | 'forwarded' | 'logged' | 'submitted' | 'validated' | 'confirmed';
 }
+// export interface WeeklyPlan {
+//   id: string;
+//   sixWeekPlanId: string;
+//   weekNumber: number;
+//   taskId: string;
+//   category: string;
+//   contractorId: string;
+//   tradeActivity: string;
+//   unit: string;
+//   estimatedQuantity: number;
+//   floorUnits: string[];
+//   constraint: string;
+//   status: 'pending' | 'assigned' | 'forwarded' | 'logged' | 'submitted' | 'validated' | 'confirmed';
+//   assignedToEngineer: boolean;
+//   remainingQuantity : number;
+//   dailyPlans: DailyPlan[];
+//   completedQuantity?: number;
+//   isCarryForwardWeek?: boolean;
+//   sourceActivityId?: string;
+  
+// }
 
 export interface WeeklyPlan {
   id: string;
@@ -75,11 +139,13 @@ export interface WeeklyPlan {
   estimatedQuantity: number;
   floorUnits: string[];
   constraint: string;
+
+constraintDate?: string;
+responsiblePerson?: string;
   status: 'pending' | 'assigned' | 'forwarded' | 'logged' | 'submitted' | 'validated' | 'confirmed';
   assignedToEngineer: boolean;
   remainingQuantity : number;
   dailyPlans: DailyPlan[];
-  
 }
 
 // Dummy data for dropdowns
