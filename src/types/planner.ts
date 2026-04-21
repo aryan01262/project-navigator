@@ -56,7 +56,8 @@ export interface PlanActivity {
   contractorId: string;
   trade: string;
   tradeActivity: string;
-  unit: string;
+  units: string[];
+unit?: string; // temporary fallback for old data
   estimatedQuantity: number;
   floorUnits: string[];
   remainingQuantity: number;
@@ -87,7 +88,8 @@ export interface DailyPlan {
   dayNumber: number;
   date: string;
   plannedQuantity: number;
-  unit: string;
+  units: string[];
+unit?: string; // temporary fallback for old data
   constraint: string;
 
   // NEW
@@ -135,7 +137,8 @@ export interface WeeklyPlan {
   category: string;
   contractorId: string;
   tradeActivity: string;
-  unit: string;
+  units: string[];
+unit?: string; // temporary fallback for old data;
   estimatedQuantity: number;
   floorUnits: string[];
   constraint: string;
@@ -163,7 +166,7 @@ export interface Ticket {
   tradeName: string;
   taskId: string;
   constraint: string;
-  rovComment : string;
+  rovComment: string;
   date: string;
 
   targetQuantity: number;
@@ -172,14 +175,14 @@ export interface Ticket {
 
   recoveryId: string;
   contractorName: string;
-  unit: string;
 
-  rov: string; // supervisor note
+  units: string[];
+  unit?: string;
 
-  // Engineer will fill these
+  rov: string;
   recoveryDeadline?: string;
   contractorStatement?: string;
-   assignedTo: 'engineer';
+  assignedTo: 'engineer';
   status: 'open' | 'in-progress' | 'closed';
 }
 

@@ -28,7 +28,7 @@ const emptyActivity = (): PlanActivity => ({
   contractorId: '',
   trade: '',
   tradeActivity: '',
-  unit: '',
+  units: [],
   estimatedQuantity: 0,
   floorUnits: [] as string[],
   remainingQuantity: 0,
@@ -69,7 +69,7 @@ const [cfEditFloor, setCfEditFloor] = useState<string[]>([]);
 
   // Weekly plan form - now activity-driven
   const [wpActivityId, setWpActivityId] = useState('');
-  const [wpUnit, setWpUnit] = useState('');
+  const [wpUnits, setWpUnits] = useState<string[]>([]);
   const [wpEstQty, setWpEstQty] = useState('');
   const [wpFloor, setWpFloor] = useState<string[]>([]);
   const [wpWeek, setWpWeek] = useState('1');
@@ -85,7 +85,7 @@ const [wpResponsiblePerson, setWpResponsiblePerson] = useState('');
   const [dpConstraint, setDpConstraint] = useState('');
   const [dpFloor, setDpFloor] = useState<string[]>([]);
   const [dpNote, setDpNote] = useState('');
-  const [dpUnits, setDpUnits] = useState('');
+  const [dpUnits, setDpUnits] = useState<string[]>([]);
   const [dpConstraintDate, setDpConstraintDate] = useState('');
 const [dpResponsiblePerson, setDpResponsiblePerson] = useState('');
   // Supervisor log
@@ -211,7 +211,7 @@ if (qtyToAssign > currentRemaining) {
     category: activity.category,
     contractorId: activity.contractorId,
     tradeActivity: activity.tradeActivity,
-    unit: wpUnit || activity.unit,
+    units: wpUnits.length ? wpUnits : (activity.units || (activity.unit ? [activity.unit] : [])),
     estimatedQuantity: qtyToAssign,
     remainingQuantity: qtyToAssign,
     floorUnits: wpFloor || activity.floorUnits,
@@ -263,7 +263,7 @@ const handleCreateDaily = () => {
     dayNumber: Number(dpDay),
     date: dpDate,
     plannedQuantity: qtyToAssign,
-    unit: dpUnits,
+    units: dpUnits.length ? dpUnits : (wp.units || (wp.unit ? [wp.unit] : [])),
     constraint: dpConstraint,
     floorUnits: dpFloor,
     engineerNote: dpNote,
@@ -468,7 +468,9 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                             <TableCell className="text-xs">{getContractorName(act.contractorId)}</TableCell>
                             <TableCell className="text-xs">{act.trade}</TableCell>
                             <TableCell className="text-xs">{act.tradeActivity}</TableCell>
-                            <TableCell className="text-xs">{act.unit}</TableCell>
+                            <TableCell className="text-xs">
+  {(act.units && act.units.length ? act.units.join(', ') : act.unit) || '—'}
+</TableCell>
                             <TableCell className="text-xs">{act.estimatedQuantity}</TableCell>
                             <TableCell className="text-xs">{act.remainingQuantity}</TableCell>
                             <TableCell className="text-xs"> {act.floorUnits?.length ? act.floorUnits.join(", ") : "—"}</TableCell>
@@ -532,10 +534,39 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                       <div className="grid grid-cols-3 gap-3">
                         <div>
                           <Label className="text-xs">Unit</Label>
-                          <Select value={editData.unit} onValueChange={v => setEditData({ ...editData, unit: v })}>
-                            <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
-                            <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-                          </Select>
+                         <DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button variant="outline" className="w-full mt-1 justify-between">
+      {editData.units?.length ? editData.units.join(", ") : "Select Units"}
+    </Button>
+  </DropdownMenuTrigger>
+
+  <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
+    {UNITS.map((u) => {
+      const selected = editData.units || [];
+      const checked = selected.includes(u);
+
+      return (
+        <div key={u} className="flex items-center gap-2 px-2 py-1">
+          <Checkbox
+            checked={checked}
+            onCheckedChange={(isChecked) => {
+              const updated = isChecked
+                ? [...selected, u]
+                : selected.filter(item => item !== u);
+
+              setEditData({
+                ...editData,
+                units: updated,
+              });
+            }}
+          />
+          <span className="text-sm">{u}</span>
+        </div>
+      );
+    })}
+  </DropdownMenuContent>
+</DropdownMenu>
                         </div>
                         <div>
                           <Label className="text-xs">Est. Quantity</Label>
@@ -655,7 +686,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
     </span>
   )}
 </span>
-                              <span className="text-xs text-muted-foreground">{wp.estimatedQuantity} {wp.unit} · {wp.floorUnits}</span>
+                              <span className="text-xs text-muted-foreground">{wp.estimatedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'} · {wp.floorUnits}</span>
                             </div>
                            <div className="flex items-center gap-2">
   <StatusBadge status={wp.status} />
@@ -707,8 +738,8 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                                     <TableRow key={dp.id}>
                                       <TableCell className="text-xs">{DAY_NAMES[dp.dayNumber - 1]}</TableCell>
                                       <TableCell className="text-xs">{dp.date}</TableCell>
-                                      <TableCell className="text-xs">{dp.plannedQuantity} {wp.unit}</TableCell>
-                                      <TableCell className="text-xs font-medium">{dp.completedQuantity !== undefined ? `${dp.completedQuantity} ${wp.unit}` : '—'}</TableCell>
+                                      <TableCell className="text-xs">{dp.plannedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'}</TableCell>
+                                      <TableCell className="text-xs font-medium">{dp.completedQuantity !== undefined ? `${dp.completedQuantity} ${(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'}` : '—'}</TableCell>
                                       <TableCell className="text-xs">{dp.floorUnits}</TableCell>
                                      <TableCell className="text-xs">
   <div>{dp.constraintLog || dp.constraint || '—'}</div>
@@ -804,7 +835,9 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                             <TableCell className="text-xs">{getContractorName(act.contractorId)}</TableCell>
                             <TableCell className="text-xs">{act.trade}</TableCell>
                             <TableCell className="text-xs">{act.tradeActivity}</TableCell>
-                            <TableCell className="text-xs">{act.unit}</TableCell>
+                            <TableCell className="text-xs">
+  {(act.units && act.units.length ? act.units.join(', ') : act.unit) || '—'}
+</TableCell>
                             <TableCell className="text-xs">{act.estimatedQuantity}</TableCell>
                             <TableCell className="text-xs">{act.remainingQuantity}</TableCell>
                             <TableCell className="text-xs"> {act.floorUnits?.length ? act.floorUnits.join(", ") : "—"}</TableCell>
@@ -868,10 +901,39 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                       <div className="grid grid-cols-3 gap-3">
                         <div>
                           <Label className="text-xs">Unit</Label>
-                          <Select value={editData.unit} onValueChange={v => setEditData({ ...editData, unit: v })}>
-                            <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
-                            <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-                          </Select>
+                       <DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button variant="outline" className="w-full mt-1 justify-between">
+      {editData.units?.length ? editData.units.join(", ") : "Select Units"}
+    </Button>
+  </DropdownMenuTrigger>
+
+  <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
+    {UNITS.map((u) => {
+      const selected = editData.units || [];
+      const checked = selected.includes(u);
+
+      return (
+        <div key={u} className="flex items-center gap-2 px-2 py-1">
+          <Checkbox
+            checked={checked}
+            onCheckedChange={(isChecked) => {
+              const updated = isChecked
+                ? [...selected, u]
+                : selected.filter(item => item !== u);
+
+              setEditData({
+                ...editData,
+                units: updated,
+              });
+            }}
+          />
+          <span className="text-sm">{u}</span>
+        </div>
+      );
+    })}
+  </DropdownMenuContent>
+</DropdownMenu>
                         </div>
                         <div>
                           <Label className="text-xs">Est. Quantity</Label>
@@ -991,7 +1053,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
     </span>
   )}
 </span>
-                              <span className="text-xs text-muted-foreground">{wp.estimatedQuantity} {wp.unit} · {wp.floorUnits}</span>
+                              <span className="text-xs text-muted-foreground">{wp.estimatedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'} · {wp.floorUnits}</span>
                             </div>
                            <div className="flex items-center gap-2">
   <StatusBadge status={wp.status} />
@@ -1043,8 +1105,8 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                                     <TableRow key={dp.id}>
                                       <TableCell className="text-xs">{DAY_NAMES[dp.dayNumber - 1]}</TableCell>
                                       <TableCell className="text-xs">{dp.date}</TableCell>
-                                      <TableCell className="text-xs">{dp.plannedQuantity} {wp.unit}</TableCell>
-                                      <TableCell className="text-xs font-medium">{dp.completedQuantity !== undefined ? `${dp.completedQuantity} ${wp.unit}` : '—'}</TableCell>
+                                      <TableCell className="text-xs">{dp.plannedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'}</TableCell>
+                                      <TableCell className="text-xs font-medium">{dp.completedQuantity !== undefined ? `${dp.completedQuantity} ${(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'}` : '—'}</TableCell>
                                       <TableCell className="text-xs">{dp.floorUnits}</TableCell>
                                       <TableCell className="text-xs">
   <div>{dp.constraintLog || dp.constraint || '—'}</div>
@@ -1109,7 +1171,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                           <TableCell className="text-xs font-mono">{ticket.recoveryId}</TableCell>
                           <TableCell className="text-xs">{getContractorName(ticket.contractorName)}</TableCell>
                           <TableCell className="text-xs">{ticket.tradeName}</TableCell>
-                          <TableCell className="text-xs text-destructive font-semibold">{ticket.shortfallQuantity} {ticket.unit}</TableCell>
+                          <TableCell className="text-xs text-destructive font-semibold">{ticket.shortfallQuantity} {(ticket.units?.length ? ticket.units.join(', ') : ticket.unit) || ''}</TableCell>
                           <TableCell className="text-xs">{ticket.constraint}</TableCell>
                           <TableCell className="text-xs">{ticket.rov}</TableCell>
                           <TableCell className="text-xs max-w-[200px]">{ticket.contractorStatement || '—'}</TableCell>
@@ -1155,7 +1217,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                         W{wp.weekNumber} · {wp.tradeActivity} · {wp.floorUnits}
                       </span>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">{wp.estimatedQuantity} {wp.unit}</span>
+                        <span className="text-xs text-muted-foreground">{wp.estimatedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'}</span>
                         <StatusBadge status={wp.status} />
                       </div>
                     </CardTitle>
@@ -1196,8 +1258,8 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                                 <TableRow key={dp.id}>
                                   <TableCell className="text-xs">{DAY_NAMES[dp.dayNumber - 1]}</TableCell>
                                   <TableCell className="text-xs">{dp.date}</TableCell>
-                                  <TableCell className="text-xs font-medium">{dp.plannedQuantity} {wp.unit}</TableCell>
-                                  <TableCell className="text-xs">{dp.completedQuantity !== undefined ? `${dp.completedQuantity} ${wp.unit}` : '—'}</TableCell>
+                                  <TableCell className="text-xs font-medium">{dp.plannedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'}</TableCell>
+                                  <TableCell className="text-xs">{dp.completedQuantity !== undefined ? `${dp.completedQuantity} ${(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'}` : '—'}</TableCell>
                                   <TableHead className="text-xs font-semibold">{dp.remainingQuantity}</TableHead>
                                   <TableCell className="text-xs">{dp.floorUnits}</TableCell>
                                   <TableCell className="text-xs">{dp.constraint || '—'}</TableCell>
@@ -1340,7 +1402,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                       <div className="grid grid-cols-3 gap-2 text-xs">
                         <div><span className="text-muted-foreground">Target:</span> {ticket.targetQuantity} {ticket.unit}</div>
                         <div><span className="text-muted-foreground">Done:</span> {ticket.completedQuantity} {ticket.unit}</div>
-                        <div className="text-destructive font-semibold">Shortfall: {ticket.shortfallQuantity} {ticket.unit}</div>
+                        <div className="text-destructive font-semibold">Shortfall: {ticket.shortfallQuantity} {(ticket.units?.length ? ticket.units.join(', ') : ticket.unit) || ''}</div>
                       </div>
                       <div className="grid grid-cols-3 gap-2 text-xs">
                        <div><span className="font-medium">ROV:</span> {ticket.rov || '—'} </div>
@@ -1514,10 +1576,38 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <Label className="text-xs">Unit</Label>
-                      <Select value={planActivities[editingActivityIdx].unit} onValueChange={v => updateActivity(editingActivityIdx, 'unit', v)}>
-                        <SelectTrigger className="mt-1"><SelectValue placeholder="Unit" /></SelectTrigger>
-                        <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-                      </Select>
+                      <DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button variant="outline" className="w-full mt-1 justify-between">
+      {planActivities[editingActivityIdx].units?.length
+        ? planActivities[editingActivityIdx].units.join(", ")
+        : "Select Units"}
+    </Button>
+  </DropdownMenuTrigger>
+
+  <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
+    {UNITS.map((u) => {
+      const selectedUnits = planActivities[editingActivityIdx].units || [];
+      const checked = selectedUnits.includes(u);
+
+      return (
+        <div key={u} className="flex items-center gap-2 px-2 py-1">
+          <Checkbox
+            checked={checked}
+            onCheckedChange={(isChecked) => {
+              const updated = isChecked
+                ? [...selectedUnits, u]
+                : selectedUnits.filter(item => item !== u);
+
+              updateActivity(editingActivityIdx, 'units', updated as any);
+            }}
+          />
+          <span className="text-sm">{u}</span>
+        </div>
+      );
+    })}
+  </DropdownMenuContent>
+</DropdownMenu>
                     </div>
                     <div>
                       <Label className="text-xs">Est. Quantity</Label>
@@ -1592,7 +1682,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                   const act = currentSwpForWeekly?.activities.find(a => a.id === val);
 
                   if (act) {
-                    setWpUnit(act.unit);          // ✅ Prefill Unit
+                    setWpUnits(act.units || (act.unit ? [act.unit] : []));         // ✅ Prefill Unit
                     setWpFloor(act.floorUnits);  // ✅ Prefill Floor Units
                     setWpEstQty("");             // optional reset quantity
                   }
@@ -1642,11 +1732,36 @@ console.log(newPlansOnly, sixWeekPlansOnly)
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <Label>Unit</Label>
-                <Select value={wpUnit} disabled>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Unit" /></SelectTrigger>
-                  <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-                </Select>
+                <Label>Units</Label>
+              <DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button variant="outline" className="w-full mt-1 justify-between">
+      {wpUnits?.length ? wpUnits.join(", ") : "Select Units"}
+    </Button>
+  </DropdownMenuTrigger>
+
+  <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
+    {(selectedActivity?.units || selectedActivity?.unit ? (selectedActivity?.units || [selectedActivity.unit]) : UNITS).map((u) => {
+      const checked = wpUnits.includes(u);
+
+      return (
+        <div key={u} className="flex items-center gap-2 px-2 py-1">
+          <Checkbox
+            checked={checked}
+            onCheckedChange={(isChecked) => {
+              const updated = isChecked
+                ? [...wpUnits, u]
+                : wpUnits.filter((item) => item !== u);
+
+              setWpUnits(updated);
+            }}
+          />
+          <span className="text-sm">{u}</span>
+        </div>
+      );
+    })}
+  </DropdownMenuContent>
+</DropdownMenu>
               </div>
               <div>
                 <Label>Est. Quantity</Label>
@@ -1782,8 +1897,10 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                     <span className="text-muted-foreground">Remaining Quantity:</span>
                     <span>{selectedWp.remainingQuantity}</span>
 
-                    <span className="text-muted-foreground">Unit:</span>
-                    <span>{selectedWp.unit}</span>
+              <span className="text-muted-foreground">Units:</span>
+<span>
+  {(selectedWp.units && selectedWp.units.length ? selectedWp.units.join(", ") : selectedWp.unit) || "—"}
+</span>
 
                     <span className="text-muted-foreground">Floor Units:</span>
                     <span>
@@ -1871,23 +1988,35 @@ console.log(newPlansOnly, sixWeekPlansOnly)
               <div>
                 <Label className="text-xs">Unit</Label>
 
-                <Select value={dpUnits} onValueChange={(v) => setDpUnits(v)}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
+               <DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button variant="outline" className="w-full mt-1 justify-between">
+      {dpUnits?.length ? dpUnits.join(", ") : "Select Units"}
+    </Button>
+  </DropdownMenuTrigger>
 
-                  <SelectContent>
-                    {allowedUnit ? (
-                      <SelectItem value={allowedUnit}>{allowedUnit}</SelectItem>
-                    ) : (
-                      UNITS.map((u) => (
-                        <SelectItem key={u} value={u}>
-                          {u}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+  <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
+    {(selectedWp?.units || (selectedWp?.unit ? [selectedWp.unit] : UNITS)).map((u) => {
+      const checked = dpUnits.includes(u);
+
+      return (
+        <div key={u} className="flex items-center gap-2 px-2 py-1">
+          <Checkbox
+            checked={checked}
+            onCheckedChange={(isChecked) => {
+              const updated = isChecked
+                ? [...dpUnits, u]
+                : dpUnits.filter(item => item !== u);
+
+              setDpUnits(updated);
+            }}
+          />
+          <span className="text-sm">{u}</span>
+        </div>
+      );
+    })}
+  </DropdownMenuContent>
+</DropdownMenu>
               </div>
               <div>
                 <Label>Floor</Label>
