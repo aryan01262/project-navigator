@@ -35,6 +35,33 @@ interface AppContextType {
     weeklyPlanId: string,
     patch: Partial<WeeklyPlan>
   ) => void;
+    updateDailyPlanByEngineer: (
+    projectId: string,
+    sixWeekPlanId: string,
+    weeklyPlanId: string,
+    dailyPlanId: string,
+    patch: Partial<DailyPlan>
+  ) => void;
+
+  deleteDailyPlanByEngineer: (
+    projectId: string,
+    sixWeekPlanId: string,
+    weeklyPlanId: string,
+    dailyPlanId: string
+  ) => void;
+
+  updateWeeklyPlanByAdmin: (
+  projectId: string,
+  sixWeekPlanId: string,
+  weeklyPlanId: string,
+  patch: Partial<WeeklyPlan>
+) => void;
+
+deleteWeeklyPlanByAdmin: (
+  projectId: string,
+  sixWeekPlanId: string,
+  weeklyPlanId: string
+) => void;
 
   syncing: boolean;
 }
@@ -181,6 +208,8 @@ const recalculatePlanActivities = (plan: SixWeekPlan): PlanActivity[] => {
     } as PlanActivity;
   });
 };
+
+
 
 const buildCarryForwardWeeklyPlan = (
   plan: SixWeekPlan,
@@ -615,13 +644,236 @@ const confirmDailyTarget = useCallback((pid: string, swpId: string, wpId: string
     }));
   }, [syncTicket]);
 
+
+  const deleteDailyPlanByEngineer = useCallback((
+  projectId: string,
+  sixWeekPlanId: string,
+  weeklyPlanId: string,
+  dailyPlanId: string
+) => {
+  let deletedDP: DailyPlan | null = null;
+  let updatedWPForSync: WeeklyPlan | null = null;
+
+  setProjects(prev => prev.map(project => {
+    if (project.id !== projectId) return project;
+
+    return {
+      ...project,
+      sixWeekPlans: project.sixWeekPlans.map(plan => {
+        if (plan.id !== sixWeekPlanId) return plan;
+
+        return {
+          ...plan,
+          weeklyPlans: plan.weeklyPlans.map(wp => {
+            if (wp.id !== weeklyPlanId) return wp;
+
+            const target = wp.dailyPlans.find(dp => dp.id === dailyPlanId);
+            if (!target) return wp;
+
+            // Engineer can delete only before forwarding
+            if (target.status !== 'pending') return wp;
+
+            deletedDP = target;
+
+            const restoredRemaining =
+              (wp.remainingQuantity ?? 0) + (target.plannedQuantity || 0);
+
+            const updatedWP: WeeklyPlan = {
+              ...wp,
+              remainingQuantity: restoredRemaining,
+              dailyPlans: wp.dailyPlans.filter(dp => dp.id !== dailyPlanId),
+            };
+
+            updatedWPForSync = updatedWP;
+            return updatedWP;
+          })
+        };
+      })
+    };
+  }));
+
+  if (updatedWPForSync) syncWeeklyPlan(updatedWPForSync);
+  if (deletedDP && user) {
+    sb.deleteDailyPlan(dailyPlanId).catch(console.error);
+  }
+}, [syncWeeklyPlan, sb, user]);
+
+const updateDailyPlanByEngineer = useCallback((
+  projectId: string,
+  sixWeekPlanId: string,
+  weeklyPlanId: string,
+  dailyPlanId: string,
+  patch: Partial<DailyPlan>
+) => {
+  updateDailyPlan(projectId, sixWeekPlanId, weeklyPlanId, dailyPlanId, dp => {
+    // Engineer can edit only before forwarding
+    if (dp.status !== 'pending') return dp;
+
+    return {
+      ...dp,
+      ...patch,
+      id: dp.id,
+      weeklyPlanId: dp.weeklyPlanId,
+      status: 'pending',
+      completedQuantity: undefined,
+      confirmedByAdmin: false,
+      validatedByEngineer: false,
+    };
+  });
+}, [updateDailyPlan]);
+
+const updateWeeklyPlanByAdmin = useCallback((
+  projectId: string,
+  sixWeekPlanId: string,
+  weeklyPlanId: string,
+  patch: Partial<WeeklyPlan>
+) => {
+  let originalWP: WeeklyPlan | null = null;
+
+  projects.forEach(p => {
+    if (p.id !== projectId) return;
+    p.sixWeekPlans.forEach(swp => {
+      if (swp.id !== sixWeekPlanId) return;
+      swp.weeklyPlans.forEach(wp => {
+        if (wp.id === weeklyPlanId) originalWP = wp;
+      });
+    });
+  });
+
+  if (!originalWP) return;
+
+  // optional safety: don't edit after confirmed execution
+  const hasLockedDaily = originalWP.dailyPlans.some(dp =>
+    dp.status === 'submitted' || dp.status === 'confirmed'
+  );
+  if (hasLockedDaily) return;
+
+  const oldQty = Number(originalWP.estimatedQuantity || 0);
+  const newQty =
+    patch.estimatedQuantity !== undefined
+      ? Number(patch.estimatedQuantity)
+      : oldQty;
+
+  setProjects(prev => prev.map(project => {
+    if (project.id !== projectId) return project;
+
+    return {
+      ...project,
+      sixWeekPlans: project.sixWeekPlans.map(plan => {
+        if (plan.id !== sixWeekPlanId) return plan;
+
+        const activity = plan.activities.find(a => a.id === originalWP!.taskId);
+        const currentActivityRemaining = activity?.remainingQuantity ?? 0;
+        const availableForEdit = currentActivityRemaining + oldQty;
+
+        const safeQty = Math.max(0, Math.min(newQty, availableForEdit));
+
+        const updatedWeeklyPlans = plan.weeklyPlans.map(wp => {
+          if (wp.id !== weeklyPlanId) return wp;
+
+          const updated: WeeklyPlan = {
+            ...wp,
+            ...patch,
+            estimatedQuantity: safeQty,
+            remainingQuantity:
+              patch.remainingQuantity !== undefined
+                ? patch.remainingQuantity
+                : safeQty,
+          };
+
+          syncWeeklyPlan(updated);
+          return updated;
+        });
+
+        const updatedActivities = plan.activities.map(a => {
+          if (a.id !== originalWP!.taskId) return a;
+
+          const updated = {
+            ...a,
+            remainingQuantity: availableForEdit - safeQty,
+          };
+
+          syncActivity(updated, sixWeekPlanId);
+          return updated;
+        });
+
+        return {
+          ...plan,
+          weeklyPlans: updatedWeeklyPlans,
+          activities: updatedActivities,
+        };
+      })
+    };
+  }));
+}, [projects, syncWeeklyPlan, syncActivity]);
+
+const deleteWeeklyPlanByAdmin = useCallback((
+  projectId: string,
+  sixWeekPlanId: string,
+  weeklyPlanId: string
+) => {
+  let targetWP: WeeklyPlan | null = null;
+
+  projects.forEach(p => {
+    if (p.id !== projectId) return;
+    p.sixWeekPlans.forEach(swp => {
+      if (swp.id !== sixWeekPlanId) return;
+      swp.weeklyPlans.forEach(wp => {
+        if (wp.id === weeklyPlanId) targetWP = wp;
+      });
+    });
+  });
+
+  if (!targetWP) return;
+
+  // optional safety: do not delete once progressed
+  const hasLockedDaily = targetWP.dailyPlans.some(dp =>
+    dp.status !== 'pending'
+  );
+  if (hasLockedDaily) return;
+
+  setProjects(prev => prev.map(project => {
+    if (project.id !== projectId) return project;
+
+    return {
+      ...project,
+      sixWeekPlans: project.sixWeekPlans.map(plan => {
+        if (plan.id !== sixWeekPlanId) return plan;
+
+        const updatedActivities = plan.activities.map(a => {
+          if (a.id !== targetWP!.taskId) return a;
+
+          const restored = {
+            ...a,
+            remainingQuantity: (a.remainingQuantity || 0) + (targetWP!.estimatedQuantity || 0),
+          };
+
+          syncActivity(restored, sixWeekPlanId);
+          return restored;
+        });
+
+        return {
+          ...plan,
+          activities: updatedActivities,
+          weeklyPlans: plan.weeklyPlans.filter(wp => wp.id !== weeklyPlanId),
+        };
+      })
+    };
+  }));
+
+  if (user) {
+    sb.deleteWeeklyPlan(weeklyPlanId).catch(console.error);
+  }
+}, [projects, syncActivity, user, sb]);
+
   return (
-   <AppContext.Provider value={{
+<AppContext.Provider value={{
   role, contractors, addContractor,
   projects, createProject, activeProjectId, setActiveProjectId,
   addSixWeekPlan, updateSixWeekPlanActivities, addWeeklyPlan, assignToEngineer,
-  addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
-  tickets, updateActivity2, updateWeeklyPlanField, updateTicket,
+  addDailyPlan, updateDailyPlanByEngineer, deleteDailyPlanByEngineer,
+  forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
+  tickets, updateActivity2, updateWeeklyPlanField, updateWeeklyPlanByAdmin, deleteWeeklyPlanByAdmin, updateTicket,
   evaluateCarryForward, createNextCarryForwardWeek, updateCarryForwardWeek,
   syncing
 }}>

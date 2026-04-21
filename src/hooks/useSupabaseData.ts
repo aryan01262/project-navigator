@@ -300,17 +300,29 @@ unit: ticket.units?.[0] ?? ticket.unit ?? null,
     });
   }, []);
 
-  return {
-    fetchAllProjects,
-    fetchFullProject,
-    fetchContractors,
-    fetchTickets,
-    upsertProject,
-    upsertContractor,
-    upsertSixWeekPlan,
-    upsertActivity,
-    upsertWeeklyPlan,
-    upsertDailyPlan,
-    upsertTicket,
-  };
+  const deleteDailyPlan = useCallback(async (dailyPlanId: string) => {
+  await supabase.from('daily_plans').delete().eq('id', dailyPlanId);
+}, []);
+
+  const deleteWeeklyPlan = useCallback(async (weeklyPlanId: string) => {
+  // delete children first if FK does not cascade
+  await supabase.from('daily_plans').delete().eq('weekly_plan_id', weeklyPlanId);
+  await supabase.from('weekly_plans').delete().eq('id', weeklyPlanId);
+}, []);
+
+ return {
+  fetchAllProjects,
+  fetchFullProject,
+  fetchContractors,
+  fetchTickets,
+  upsertProject,
+  upsertContractor,
+  upsertSixWeekPlan,
+  upsertActivity,
+  upsertWeeklyPlan,
+  upsertDailyPlan,
+  deleteDailyPlan,
+  deleteWeeklyPlan, // NEW
+  upsertTicket,
+};
 };

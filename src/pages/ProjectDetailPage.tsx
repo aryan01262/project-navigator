@@ -40,8 +40,9 @@ const ProjectDetailPage = () => {
 const {
   projects, contractors, role,
   addSixWeekPlan, updateSixWeekPlanActivities, addWeeklyPlan, assignToEngineer,
-  addDailyPlan, forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
-  updateActivity2, updateWeeklyPlanField,
+  addDailyPlan, updateDailyPlanByEngineer, deleteDailyPlanByEngineer,
+  forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
+  updateActivity2, updateWeeklyPlanField, updateWeeklyPlanByAdmin, deleteWeeklyPlanByAdmin,
   evaluateCarryForward, createNextCarryForwardWeek, updateCarryForwardWeek,
   tickets, updateTicket
 } = useAppContext();
@@ -100,6 +101,125 @@ const [showTickets, setShowTickets] = useState(false);
 const [ticketTab, setTicketTab] = useState<'open' | 'in-progress' | 'closed'>('open');
   // Engineer submit
   const [submitConstraint, setSubmitConstraint] = useState('');
+
+
+  const [showEditDaily, setShowEditDaily] = useState<{ swpId: string; wpId: string; dpId: string } | null>(null);
+const [editDpDate, setEditDpDate] = useState('');
+const [editDpDay, setEditDpDay] = useState('1');
+const [editDpQty, setEditDpQty] = useState('');
+const [editDpConstraint, setEditDpConstraint] = useState('');
+const [editDpFloor, setEditDpFloor] = useState<string[]>([]);
+const [editDpNote, setEditDpNote] = useState('');
+const [editDpUnits, setEditDpUnits] = useState<string[]>([]);
+
+const [showEditWeekly, setShowEditWeekly] = useState<{ swpId: string; wpId: string } | null>(null);
+const [editWpQty, setEditWpQty] = useState('');
+const [editWpConstraint, setEditWpConstraint] = useState('');
+const [editWpFloor, setEditWpFloor] = useState<string[]>([]);
+const [editWpUnits, setEditWpUnits] = useState<string[]>([]);
+const [editWpContractorId, setEditWpContractorId] = useState('');
+const [planTab, setPlanTab] = useState<'six-week' | 'new-plan'>('six-week');
+const openEditWeeklyDialog = (swpId: string, wp: WeeklyPlan) => {
+  setShowEditWeekly({ swpId, wpId: wp.id });
+  setEditWpQty(String(wp.estimatedQuantity || 0));
+  setEditWpConstraint(wp.constraint || '');
+  setEditWpFloor(Array.isArray(wp.floorUnits) ? wp.floorUnits : []);
+  setEditWpUnits(wp.units || (wp.unit ? [wp.unit] : []));
+  setEditWpContractorId(wp.contractorId || '');
+};
+
+const handleUpdateWeekly = () => {
+  if (!showEditWeekly || !project) return;
+
+  const swp = project.sixWeekPlans.find(s => s.id === showEditWeekly.swpId);
+  const wp = swp?.weeklyPlans.find(w => w.id === showEditWeekly.wpId);
+  if (!swp || !wp) return;
+
+  const qty = Number(editWpQty || 0);
+  if (qty <= 0) {
+    alert('Quantity must be greater than 0');
+    return;
+  }
+
+  updateWeeklyPlanByAdmin(project.id, swp.id, wp.id, {
+    contractorId: editWpContractorId,
+    estimatedQuantity: qty,
+    remainingQuantity: qty,
+    constraint: editWpConstraint,
+    floorUnits: editWpFloor,
+    units: editWpUnits,
+    unit: editWpUnits[0] || undefined,
+  });
+
+  setShowEditWeekly(null);
+  setEditWpQty('');
+  setEditWpConstraint('');
+  setEditWpFloor([]);
+  setEditWpUnits([]);
+  setEditWpContractorId('');
+};
+
+const openEditDailyDialog = (swpId: string, wpId: string, dp: DailyPlan) => {
+  setShowEditDaily({ swpId, wpId, dpId: dp.id });
+  setEditDpDate(dp.date || '');
+  setEditDpDay(String(dp.dayNumber || 1));
+  setEditDpQty(String(dp.plannedQuantity || ''));
+  setEditDpConstraint(dp.constraint || '');
+  setEditDpFloor(Array.isArray(dp.floorUnits) ? dp.floorUnits : []);
+  setEditDpNote(dp.engineerNote || '');
+  setEditDpUnits(dp.units || (dp.unit ? [dp.unit] : []));
+};
+
+const handleUpdateDaily = () => {
+  if (!showEditDaily || !editDpDate || !editDpQty) return;
+
+  const swp = project.sixWeekPlans.find(s => s.id === showEditDaily.swpId);
+  const wp = swp?.weeklyPlans.find(w => w.id === showEditDaily.wpId);
+  const dp = wp?.dailyPlans.find(d => d.id === showEditDaily.dpId);
+  if (!swp || !wp || !dp) return;
+
+  const oldQty = Number(dp.plannedQuantity || 0);
+  const newQty = Number(editDpQty || 0);
+  if (newQty <= 0) {
+    alert('Quantity must be greater than 0');
+    return;
+  }
+
+  const availableQty = (wp.remainingQuantity ?? 0) + oldQty;
+  if (newQty > availableQty) {
+    alert(`Max allowed quantity is ${availableQty}`);
+    return;
+  }
+
+  // restore old qty first, then apply new
+  updateWeeklyPlanField(project.id, swp.id, wp.id, {
+    remainingQuantity: availableQty - newQty,
+  });
+
+  updateDailyPlanByEngineer(project.id, swp.id, wp.id, dp.id, {
+    date: editDpDate,
+    dayNumber: Number(editDpDay),
+    plannedQuantity: newQty,
+    constraint: editDpConstraint,
+    floorUnits: editDpFloor,
+    engineerNote: editDpNote,
+    units: editDpUnits.length
+  ? editDpUnits
+  : (dp.units || (dp.unit ? [dp.unit] : [])),
+
+unit: editDpUnits[0] || undefined, // fallback
+    remainingQuantity: availableQty - newQty,
+  });
+
+  setShowEditDaily(null);
+  setEditDpDate('');
+  setEditDpDay('1');
+  setEditDpQty('');
+  setEditDpConstraint('');
+  setEditDpFloor([]);
+  setEditDpNote('');
+  setEditDpUnits([]);
+};
 
 const engineerTickets = tickets.filter(t => t.assignedTo === 'engineer');
 const adminTickets = tickets;
@@ -230,8 +350,14 @@ updateActivity2(project.id, sixWeekPlanId, wpActivityId, {
     remainingQuantity: currentRemaining - qtyToAssign,
   });
 
-  setShowCreateWeekly(null);
-  setWpActivityId(''); setWpUnit(''); setWpEstQty(''); setWpFloor([]); setWpConstraint(''); setWpWeek('1'); setWpConstraintDate('');
+ setShowCreateWeekly(null);
+setWpActivityId('');
+setWpUnits([]);
+setWpEstQty('');
+setWpFloor([]);
+setWpConstraint('');
+setWpWeek('1');
+setWpConstraintDate('');
 setWpResponsiblePerson('');
 };
   
@@ -281,7 +407,14 @@ responsiblePerson: dpResponsiblePerson || undefined,
   });
 
   // reset form
-  setDpDate(''); setDpQty(''); setDpConstraint(''); setDpFloor([]); setDpNote(''); setDpDay('1'); setDpUnits(''); setDpConstraintDate('');
+setDpDate('');
+setDpQty('');
+setDpConstraint('');
+setDpFloor([]);
+setDpNote('');
+setDpDay('1');
+setDpUnits([]);
+setDpConstraintDate('');
 setDpResponsiblePerson('');
   setShowCreateDaily(null);
 };
@@ -313,7 +446,6 @@ setDpResponsiblePerson('');
     ? selectedWp.floorUnits
     : [];
 
-  const allowedUnit = selectedWp?.unit || "";
 
   const maxAllowedQty = selectedWp
   ? (selectedWp.remainingQuantity ?? selectedWp.estimatedQuantity)
@@ -409,17 +541,25 @@ console.log(newPlansOnly, sixWeekPlansOnly)
       {/* =================== ADMIN VIEW =================== */}
       {role === 'admin' && (
         <div className="space-y-4">
- <div className="flex items-center justify-between">
-    <h2 className="text-lg font-semibold">6 Week Plan Block</h2>
+ <Tabs value={planTab} onValueChange={(v) => setPlanTab(v as 'six-week' | 'new-plan')} className="space-y-4">
+  <div className="flex items-center justify-between">
+    <TabsList>
+      <TabsTrigger value="six-week">6 Week Plan</TabsTrigger>
+      <TabsTrigger value="new-plan">New Plan</TabsTrigger>
+    </TabsList>
+
     <Button
       onClick={() => {
-        setPlanDialogMode('six-week');
+        setPlanDialogMode(planTab);
         setShowCreatePlan(true);
       }}
     >
-      <Plus className="w-4 h-4" /> 6 Week Plan
+      <Plus className="w-4 h-4" />
+      {planTab === 'six-week' ? ' 6 Week Plan' : ' New Plan'}
     </Button>
   </div>
+
+  <TabsContent value="six-week" className="space-y-4">
          {sixWeekPlansOnly.length === 0 ? (
     <p className="text-sm text-muted-foreground">No 6 week plans yet.</p>
   ) : (
@@ -688,9 +828,10 @@ console.log(newPlansOnly, sixWeekPlansOnly)
 </span>
                               <span className="text-xs text-muted-foreground">{wp.estimatedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'} · {wp.floorUnits}</span>
                             </div>
-                           <div className="flex items-center gap-2">
+<div className="flex items-center gap-2">
   <StatusBadge status={wp.status} />
 
+  {/* Carry-forward specific edit */}
   {wp.isCarryForwardWeek && role === 'admin' && (
     <Button
       size="sm"
@@ -700,9 +841,36 @@ console.log(newPlansOnly, sixWeekPlansOnly)
         openCarryForwardEdit(swp.id, wp);
       }}
     >
-      <Pencil className="w-3 h-3" /> Edit
+      <Pencil className="w-3 h-3" /> Carry Edit
     </Button>
   )}
+
+  {/* General admin edit for any sub-week */}
+  <Button
+    size="sm"
+    variant="outline"
+    onClick={e => {
+      e.stopPropagation();
+      openEditWeeklyDialog(swp.id, wp);
+    }}
+  >
+    <Pencil className="w-3 h-3" /> Edit
+  </Button>
+
+  {/* General admin delete for any sub-week */}
+  <Button
+    size="sm"
+    variant="outline"
+    className="text-destructive"
+    onClick={e => {
+      e.stopPropagation();
+      const ok = window.confirm('Delete this sub-week plan?');
+      if (!ok) return;
+      deleteWeeklyPlanByAdmin(project.id, swp.id, wp.id);
+    }}
+  >
+    <Trash2 className="w-3 h-3" /> Delete
+  </Button>
 
   {!wp.assignedToEngineer && (
     <Button
@@ -774,19 +942,8 @@ console.log(newPlansOnly, sixWeekPlansOnly)
           ))
         
 )}
-<div className="space-y-4 mt-8">
-  <div className="flex items-center justify-between">
-    <h2 className="text-lg font-semibold">New Plan Block</h2>
-    <Button
-      variant="outline"
-      onClick={() => {
-        setPlanDialogMode('new-plan');
-        setShowCreatePlan(true);
-      }}
-    >
-      <Plus className="w-4 h-4" /> New Plan
-    </Button>
-  </div>
+  </TabsContent>
+<TabsContent value="new-plan" className="space-y-4">
 {newPlansOnly.length === 0 ? (
     <p className="text-sm text-muted-foreground">No new plans yet.</p>
   ) : (
@@ -1055,9 +1212,10 @@ console.log(newPlansOnly, sixWeekPlansOnly)
 </span>
                               <span className="text-xs text-muted-foreground">{wp.estimatedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'} · {wp.floorUnits}</span>
                             </div>
-                           <div className="flex items-center gap-2">
+<div className="flex items-center gap-2">
   <StatusBadge status={wp.status} />
 
+  {/* Carry-forward specific edit */}
   {wp.isCarryForwardWeek && role === 'admin' && (
     <Button
       size="sm"
@@ -1067,9 +1225,36 @@ console.log(newPlansOnly, sixWeekPlansOnly)
         openCarryForwardEdit(swp.id, wp);
       }}
     >
-      <Pencil className="w-3 h-3" /> Edit
+      <Pencil className="w-3 h-3" /> Carry Edit
     </Button>
   )}
+
+  {/* General admin edit for any sub-week */}
+  <Button
+    size="sm"
+    variant="outline"
+    onClick={e => {
+      e.stopPropagation();
+      openEditWeeklyDialog(swp.id, wp);
+    }}
+  >
+    <Pencil className="w-3 h-3" /> Edit
+  </Button>
+
+  {/* General admin delete for any sub-week */}
+  <Button
+    size="sm"
+    variant="outline"
+    className="text-destructive"
+    onClick={e => {
+      e.stopPropagation();
+      const ok = window.confirm('Delete this sub-week plan?');
+      if (!ok) return;
+      deleteWeeklyPlanByAdmin(project.id, swp.id, wp.id);
+    }}
+  >
+    <Trash2 className="w-3 h-3" /> Delete
+  </Button>
 
   {!wp.assignedToEngineer && (
     <Button
@@ -1140,7 +1325,9 @@ console.log(newPlansOnly, sixWeekPlansOnly)
             </Card>
     ))
   )}
-  </div>
+ </TabsContent>
+ </Tabs>
+ 
           {/* Admin Tickets Table */}
           {adminTickets.length > 0 && (
             <Card className="mt-6">
@@ -1268,10 +1455,37 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                                   <TableCell><StatusBadge status={dp.status} /></TableCell>
                                   <TableCell className="space-x-1">
                                     {dp.status === 'pending' && (
-                                      <Button size="sm" variant="outline" onClick={() => forwardDailyToSupervisor(project.id, wp.swpId, wp.id, dp.id)}>
-                                        <Send className="w-3 h-3" /> Forward
-                                      </Button>
-                                    )}
+  <div className="flex items-center gap-1">
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={() => openEditDailyDialog(wp.swpId, wp.id, dp)}
+    >
+      <Pencil className="w-3 h-3" /> Edit
+    </Button>
+
+    <Button
+      size="sm"
+      variant="outline"
+      className="text-destructive"
+      onClick={() => {
+        const ok = window.confirm('Delete this daily task?');
+        if (!ok) return;
+        deleteDailyPlanByEngineer(project.id, wp.swpId, wp.id, dp.id);
+      }}
+    >
+      <Trash2 className="w-3 h-3" /> Delete
+    </Button>
+
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={() => forwardDailyToSupervisor(project.id, wp.swpId, wp.id, dp.id)}
+    >
+      <Send className="w-3 h-3" /> Forward
+    </Button>
+  </div>
+)}
                                     {dp.status === 'logged' && (
                                       <div className="flex items-center gap-1">
                                         <Select value={submitConstraint} onValueChange={setSubmitConstraint}>
@@ -1665,6 +1879,271 @@ console.log(newPlansOnly, sixWeekPlansOnly)
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!showEditWeekly} onOpenChange={() => setShowEditWeekly(null)}>
+  <DialogContent className="sm:max-w-4xl">
+    <DialogHeader>
+      <DialogTitle>Edit Sub-Week Plan</DialogTitle>
+    </DialogHeader>
+
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <Label>Contractor</Label>
+          <Select value={editWpContractorId} onValueChange={setEditWpContractorId}>
+            <SelectTrigger className="mt-1">
+              <SelectValue placeholder="Select contractor" />
+            </SelectTrigger>
+            <SelectContent>
+              {contractors.map(c => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label>Estimated Quantity</Label>
+          <Input
+            type="number"
+            step="any"
+            value={editWpQty}
+            onChange={e => setEditWpQty(e.target.value)}
+            className="mt-1"
+          />
+        </div>
+
+        <div>
+          <Label>Constraint</Label>
+          <Select value={editWpConstraint} onValueChange={setEditWpConstraint}>
+            <SelectTrigger className="mt-1">
+              <SelectValue placeholder="Select constraint" />
+            </SelectTrigger>
+            <SelectContent>
+              {CONSTRAINTS.map(c => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Units</Label>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full mt-1 justify-between">
+                {editWpUnits?.length ? editWpUnits.join(", ") : "Select Units"}
+              </Button>
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
+              {UNITS.map((u) => {
+                const checked = editWpUnits.includes(u);
+
+                return (
+                  <div key={u} className="flex items-center gap-2 px-2 py-1">
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(isChecked) => {
+                        const updated = isChecked
+                          ? [...editWpUnits, u]
+                          : editWpUnits.filter(item => item !== u);
+
+                        setEditWpUnits(updated);
+                      }}
+                    />
+                    <span className="text-sm">{u}</span>
+                  </div>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <div>
+          <Label>Floor Units</Label>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full mt-1 justify-between">
+                {editWpFloor?.length ? editWpFloor.join(", ") : "Select Floor Units"}
+              </Button>
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
+              {FLOOR_UNITS.map((f) => {
+                const checked = editWpFloor.includes(f);
+
+                return (
+                  <div key={f} className="flex items-center gap-2 px-2 py-1">
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(isChecked) => {
+                        const updated = isChecked
+                          ? [...editWpFloor, f]
+                          : editWpFloor.filter(item => item !== f);
+
+                        setEditWpFloor(updated);
+                      }}
+                    />
+                    <span className="text-sm">{f}</span>
+                  </div>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={() => setShowEditWeekly(null)}>
+          Cancel
+        </Button>
+        <Button onClick={handleUpdateWeekly}>
+          Save Changes
+        </Button>
+      </div>
+    </div>
+  </DialogContent>
+</Dialog>
+
+      <Dialog open={!!showEditDaily} onOpenChange={() => setShowEditDaily(null)}>
+  <DialogContent className="sm:max-w-4xl">
+    <DialogHeader>
+      <DialogTitle>Edit Daily Plan</DialogTitle>
+    </DialogHeader>
+
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Day</Label>
+          <Select value={editDpDay} onValueChange={setEditDpDay}>
+            <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {DAY_NAMES.map((d, i) => (
+                <SelectItem key={i} value={String(i + 1)}>{d}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label>Date</Label>
+          <Input type="date" value={editDpDate} onChange={e => setEditDpDate(e.target.value)} className="mt-1" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Planned Quantity</Label>
+          <Input
+            type="number"
+            step="any"
+            value={editDpQty}
+            onChange={e => setEditDpQty(e.target.value)}
+            className="mt-1"
+          />
+        </div>
+
+        <div>
+  <Label>Units</Label>
+
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button variant="outline" className="w-full mt-1 justify-between">
+        {editDpUnits?.length ? editDpUnits.join(", ") : "Select Units"}
+      </Button>
+    </DropdownMenuTrigger>
+
+    <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
+      {(selectedWp?.units || (selectedWp?.unit ? [selectedWp.unit] : UNITS)).map((u) => {
+        const checked = editDpUnits.includes(u);
+
+        return (
+          <div key={u} className="flex items-center gap-2 px-2 py-1">
+            <Checkbox
+              checked={checked}
+              onCheckedChange={(isChecked) => {
+                const updated = isChecked
+                  ? [...editDpUnits, u]
+                  : editDpUnits.filter(item => item !== u);
+
+                setEditDpUnits(updated);
+              }}
+            />
+            <span className="text-sm">{u}</span>
+          </div>
+        );
+      })}
+    </DropdownMenuContent>
+  </DropdownMenu>
+</div>
+      </div>
+
+      <div>
+        <Label>Constraint</Label>
+        <Select value={editDpConstraint} onValueChange={setEditDpConstraint}>
+          <SelectTrigger className="mt-1"><SelectValue placeholder="Select constraint" /></SelectTrigger>
+          <SelectContent>
+            {CONSTRAINTS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div>
+        <Label>Floor Units</Label>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="w-full mt-1 justify-between">
+              {editDpFloor?.length ? editDpFloor.join(", ") : "Select Floor"}
+            </Button>
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
+            {FLOOR_UNITS.map((f) => {
+              const checked = editDpFloor.includes(f);
+
+              return (
+                <div key={f} className="flex items-center gap-2 px-2 py-1">
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(isChecked) => {
+                      const updated = isChecked
+                        ? [...editDpFloor, f]
+                        : editDpFloor.filter(item => item !== f);
+
+                      setEditDpFloor(updated);
+                    }}
+                  />
+                  <span className="text-sm">{f}</span>
+                </div>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div>
+        <Label>Engineer Note</Label>
+        <Input value={editDpNote} onChange={e => setEditDpNote(e.target.value)} className="mt-1" />
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={() => setShowEditDaily(null)}>
+          Cancel
+        </Button>
+        <Button onClick={handleUpdateDaily}>
+          Save Changes
+        </Button>
+      </div>
+    </div>
+  </DialogContent>
+</Dialog>
 
       {/* Create Sub-Week Plan — Activity-driven */}
       <Dialog open={!!showCreateWeekly} onOpenChange={() => setShowCreateWeekly(null)}>
