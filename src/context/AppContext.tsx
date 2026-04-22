@@ -63,6 +63,22 @@ deleteWeeklyPlanByAdmin: (
   weeklyPlanId: string
 ) => void;
 
+updateSupervisorLog: (
+  projectId: string,
+  sixWeekPlanId: string,
+  weeklyPlanId: string,
+  dailyPlanId: string,
+  completedQuantity: number,
+  rov: string
+) => void;
+
+deleteSupervisorLog: (
+  projectId: string,
+  sixWeekPlanId: string,
+  weeklyPlanId: string,
+  dailyPlanId: string
+) => void;
+
   syncing: boolean;
 }
 
@@ -645,7 +661,48 @@ const confirmDailyTarget = useCallback((pid: string, swpId: string, wpId: string
   }, [syncTicket]);
 
 
-  const deleteDailyPlanByEngineer = useCallback((
+  const updateSupervisorLog = useCallback((
+  pid: string,
+  swpId: string,
+  wpId: string,
+  dpId: string,
+  completedQuantity: number,
+  rov: string
+) => {
+  updateDailyPlan(pid, swpId, wpId, dpId, dp => {
+    if (dp.status !== 'logged') return dp;
+
+    return {
+      ...dp,
+      completedQuantity,
+      rov,
+      status: 'logged',
+    };
+  });
+}, [updateDailyPlan]);
+
+
+const deleteSupervisorLog = useCallback((
+  pid: string,
+  swpId: string,
+  wpId: string,
+  dpId: string
+) => {
+  updateDailyPlan(pid, swpId, wpId, dpId, dp => {
+    if (dp.status !== 'logged') return dp;
+
+    return {
+      ...dp,
+      completedQuantity: undefined,
+      rov: undefined,
+      isDone: false,
+      status: 'forwarded',
+    };
+  });
+}, [updateDailyPlan]);
+
+
+const deleteDailyPlanByEngineer = useCallback((
   projectId: string,
   sixWeekPlanId: string,
   weeklyPlanId: string,
@@ -670,6 +727,8 @@ const confirmDailyTarget = useCallback((pid: string, swpId: string, wpId: string
             const target = wp.dailyPlans.find(dp => dp.id === dailyPlanId);
             if (!target) return wp;
 
+            if (target.status !== 'pending') return wp;
+
             deletedDP = target;
 
             const restoredRemaining =
@@ -689,8 +748,13 @@ const confirmDailyTarget = useCallback((pid: string, swpId: string, wpId: string
     };
   }));
 
+  // remove related tickets from local state
+  setTickets(prev => prev.filter(t => t.dailyPlanId !== dailyPlanId));
+
   if (updatedWPForSync) syncWeeklyPlan(updatedWPForSync);
+
   if (deletedDP && user) {
+    sb.deleteTicketsByDailyPlanId(dailyPlanId).catch(console.error);
     sb.deleteDailyPlan(dailyPlanId).catch(console.error);
   }
 }, [syncWeeklyPlan, sb, user]);
@@ -821,11 +885,10 @@ const deleteWeeklyPlanByAdmin = useCallback((
 
   if (!targetWP) return;
 
-  // // optional safety: do not delete once progressed
-  // const hasLockedDaily = targetWP.dailyPlans.some(dp =>
-  //   dp.status !== 'pending'
-  // );
-  // if (hasLockedDaily) return;
+  const hasLockedDaily = targetWP.dailyPlans.some(dp =>
+    dp.status !== 'pending'
+  );
+  if (hasLockedDaily) return;
 
   setProjects(prev => prev.map(project => {
     if (project.id !== projectId) return project;
@@ -856,7 +919,11 @@ const deleteWeeklyPlanByAdmin = useCallback((
     };
   }));
 
+  // remove related tickets from local state
+  setTickets(prev => prev.filter(t => t.weeklyPlanId !== weeklyPlanId));
+
   if (user) {
+    sb.deleteTicketsByWeeklyPlanId(weeklyPlanId).catch(console.error);
     sb.deleteWeeklyPlan(weeklyPlanId).catch(console.error);
   }
 }, [projects, syncActivity, user, sb]);
@@ -869,7 +936,7 @@ const deleteWeeklyPlanByAdmin = useCallback((
   addDailyPlan, updateDailyPlanByEngineer, deleteDailyPlanByEngineer,
   forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
   tickets, updateActivity2, updateWeeklyPlanField, updateWeeklyPlanByAdmin, deleteWeeklyPlanByAdmin, updateTicket,
-  evaluateCarryForward, createNextCarryForwardWeek, updateCarryForwardWeek,
+  evaluateCarryForward, createNextCarryForwardWeek, updateCarryForwardWeek,deleteSupervisorLog,
   syncing
 }}>
       {children}

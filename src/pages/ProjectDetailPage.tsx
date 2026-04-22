@@ -44,7 +44,7 @@ const {
   forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
   updateActivity2, updateWeeklyPlanField, updateWeeklyPlanByAdmin, deleteWeeklyPlanByAdmin,
   evaluateCarryForward, createNextCarryForwardWeek, updateCarryForwardWeek,
-  tickets, updateTicket
+  tickets, updateTicket, deleteSupervisorLog, updateSupervisorLog
 } = useAppContext();
 
   const project = projects.find(p => p.id === projectId);
@@ -119,6 +119,66 @@ const [editWpFloor, setEditWpFloor] = useState<string[]>([]);
 const [editWpUnits, setEditWpUnits] = useState<string[]>([]);
 const [editWpContractorId, setEditWpContractorId] = useState('');
 const [planTab, setPlanTab] = useState<'six-week' | 'new-plan'>('six-week');
+const [showSupervisorLogDialog, setShowSupervisorLogDialog] = useState<{
+  sixWeekPlanId: string;
+  weeklyPlanId: string;
+  dailyPlanId: string;
+} | null>(null);
+const [supervisorDialogMode, setSupervisorDialogMode] = useState<'create' | 'edit'>('create');
+const [supervisorLogQty, setSupervisorLogQty] = useState('');
+const [supervisorRovComment, setSupervisorRovComment] = useState('');
+
+const openSupervisorLogDialog = (
+  sixWeekPlanId: string,
+  weeklyPlanId: string,
+  dp: DailyPlan
+) => {
+  setShowSupervisorLogDialog({
+    sixWeekPlanId,
+    weeklyPlanId,
+    dailyPlanId: dp.id,
+  });
+
+  setSupervisorLogQty(dp.completedQuantity ? String(dp.completedQuantity) : '');
+  setSupervisorRovComment(dp.rov || 'none');
+};
+const handleSupervisorLogSubmit = () => {
+  if (!showSupervisorLogDialog || !project) return;
+
+  const { sixWeekPlanId, weeklyPlanId, dailyPlanId } = showSupervisorLogDialog;
+  const qty = Number(supervisorLogQty || 0);
+
+  if (qty <= 0) {
+    alert('Done quantity must be greater than 0');
+    return;
+  }
+
+  if (supervisorDialogMode === 'edit') {
+    updateSupervisorLog(
+      project.id,
+      sixWeekPlanId,
+      weeklyPlanId,
+      dailyPlanId,
+      qty,
+      supervisorRovComment
+    );
+  } else {
+    logDailyTarget(
+      project.id,
+      sixWeekPlanId,
+      weeklyPlanId,
+      dailyPlanId,
+      qty,
+      true,
+      supervisorRovComment
+    );
+  }
+
+  setShowSupervisorLogDialog(null);
+  setSupervisorDialogMode('create');
+  setSupervisorLogQty('');
+  setSupervisorRovComment('');
+};
 const openEditWeeklyDialog = (swpId: string, wp: WeeklyPlan) => {
   setShowEditWeekly({ swpId, wpId: wp.id });
   setEditWpQty(String(wp.estimatedQuantity || 0));
@@ -1536,7 +1596,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                      <TableHead className="font-semibold">Engineer Comments</TableHead>
                       <TableHead className="font-semibold">ROV</TableHead>
                     {/* <TableHead className="font-semibold">Status</TableHead> */}
-                    <TableHead className="font-semibold w-[350px]">Actions</TableHead>
+                    <TableHead className="font-semibold">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1553,31 +1613,41 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                       <TableCell className="text-xs">{dp.rov || '—'}</TableCell>
                       {/* <TableCell><StatusBadge status={dp.status} /></TableCell> */}
                       <TableCell>
-                        {dp.status === 'forwarded' && (
-                          <div className="flex items-center gap-1 w-[350px] justify-between">
-                            <Input type="number" placeholder="Done qty" value={logQty} onChange={e => setLogQty(e.target.value)} className="h-7 w-[100px] text-xs" />
-                            {/* <Input placeholder="Note" value={logNote} onChange={e => setLogNote(e.target.value)} className="h-7 w-[200px] text-xs" /> */}
-                            <div>
-                              <Select value={rovComment} onValueChange={setRovComment}>
-                                <SelectTrigger className="mt-1"><SelectValue placeholder="Select ROV Comment" /></SelectTrigger>
-                                <SelectContent>{CONSTRAINTS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                              </Select>
-                            </div>
-                            {/* <Button size="sm" onClick={() => { logDailyTarget(project.id, dp.sixWeekPlanId, dp.weeklyPlanId, dp.id, Number(logQty), true, rovComment); setLogQty(''); setRovComment(''); }}>
-                              Log
-                            </Button> */}
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                handleLogClick(project.id, dp.sixWeekPlanId, dp.weeklyPlanId, dp.id)
-                              }
-                            >
-                              Log
-                            </Button>
-                          </div>
-                        )}
-                        {dp.status === 'logged' && <span className="text-xs text-muted-foreground">Done: {dp.completedQuantity} — Sent to Engineer</span>}
-                      </TableCell>
+  {dp.status === 'forwarded' && (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={() => openSupervisorLogDialog(dp.sixWeekPlanId, dp.weeklyPlanId, dp, 'create')}
+    >
+      Log Qty / ROV
+    </Button>
+  )}
+
+  {dp.status === 'logged' && (
+    <div className="flex items-center gap-2">
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => openSupervisorLogDialog(dp.sixWeekPlanId, dp.weeklyPlanId, dp, 'edit')}
+      >
+        <Pencil className="w-3 h-3" /> Edit
+      </Button>
+
+      <Button
+        size="sm"
+        variant="outline"
+        className="text-destructive"
+        onClick={() => {
+          const ok = window.confirm('Delete supervisor log and move task back to forwarded state?');
+          if (!ok) return;
+          deleteSupervisorLog(project.id, dp.sixWeekPlanId, dp.weeklyPlanId, dp.id);
+        }}
+      >
+        <Trash2 className="w-3 h-3" /> Delete
+      </Button>
+    </div>
+  )}
+</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1879,6 +1949,118 @@ console.log(newPlansOnly, sixWeekPlansOnly)
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+  open={!!showSupervisorLogDialog}
+  onOpenChange={() => setShowSupervisorLogDialog(null)}
+>
+  <DialogContent className="sm:max-w-3xl">
+    <DialogHeader>
+      <DialogTitle>
+  {supervisorDialogMode === 'edit' ? 'Edit Daily Progress' : 'Log Daily Progress'}
+</DialogTitle>
+    </DialogHeader>
+
+    {showSupervisorLogDialog && (() => {
+      const swp = project.sixWeekPlans.find(
+        s => s.id === showSupervisorLogDialog.sixWeekPlanId
+      );
+      const wp = swp?.weeklyPlans.find(
+        w => w.id === showSupervisorLogDialog.weeklyPlanId
+      );
+      const dp = wp?.dailyPlans.find(
+        d => d.id === showSupervisorLogDialog.dailyPlanId
+      );
+
+      if (!swp || !wp || !dp) return null;
+
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+              <span className="text-muted-foreground">Plan Name:</span>
+              <span>{swp.name}</span>
+
+              <span className="text-muted-foreground">Week:</span>
+              <span>Week {wp.weekNumber}</span>
+
+              <span className="text-muted-foreground">Trade Activity:</span>
+              <span>{wp.tradeActivity}</span>
+
+              <span className="text-muted-foreground">Contractor:</span>
+              <span>{getContractorName(wp.contractorId)}</span>
+
+              <span className="text-muted-foreground">Day:</span>
+              <span>{DAY_NAMES[dp.dayNumber - 1]}</span>
+
+              <span className="text-muted-foreground">Date:</span>
+              <span>{dp.date}</span>
+
+              <span className="text-muted-foreground">Planned Quantity:</span>
+              <span>
+                {dp.plannedQuantity}{' '}
+                {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'}
+              </span>
+
+              <span className="text-muted-foreground">Floor Units:</span>
+              <span>{Array.isArray(dp.floorUnits) ? dp.floorUnits.join(', ') : dp.floorUnits || '—'}</span>
+
+              <span className="text-muted-foreground">Constraint:</span>
+              <span>{dp.constraint || '—'}</span>
+
+              <span className="text-muted-foreground">Engineer Note:</span>
+              <span>{dp.engineerNote || '—'}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Done Quantity</Label>
+              <Input
+                type="number"
+                step="any"
+                value={supervisorLogQty}
+                onChange={e => setSupervisorLogQty(e.target.value)}
+                placeholder="Enter completed quantity"
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <Label>Select ROV</Label>
+              <Select value={supervisorRovComment} onValueChange={setSupervisorRovComment}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select ROV Comment" />
+                </SelectTrigger>
+                <SelectContent>
+  <SelectItem value="none">None</SelectItem>
+
+  {CONSTRAINTS.map(c => (
+    <SelectItem key={c} value={c}>
+      {c}
+    </SelectItem>
+  ))}
+</SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowSupervisorLogDialog(null)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSupervisorLogSubmit}>
+  {supervisorDialogMode === 'edit' ? 'Update Progress' : 'Log Progress'}
+</Button>
+          </div>
+        </div>
+      );
+    })()}
+  </DialogContent>
+</Dialog>
 
       <Dialog open={!!showEditWeekly} onOpenChange={() => setShowEditWeekly(null)}>
   <DialogContent className="sm:max-w-4xl">

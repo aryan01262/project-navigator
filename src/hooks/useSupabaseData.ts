@@ -310,6 +310,15 @@ unit: ticket.units?.[0] ?? ticket.unit ?? null,
   await supabase.from('weekly_plans').delete().eq('id', weeklyPlanId);
 }, []);
 
+
+const deleteTicketsByDailyPlanId = useCallback(async (dailyPlanId: string) => {
+  await supabase.from('tickets').delete().eq('daily_plan_id', dailyPlanId);
+}, []);
+
+const deleteTicketsByWeeklyPlanId = useCallback(async (weeklyPlanId: string) => {
+  await supabase.from('tickets').delete().eq('weekly_plan_id', weeklyPlanId);
+}, []);
+
  return {
   fetchAllProjects,
   fetchFullProject,
@@ -324,5 +333,7 @@ unit: ticket.units?.[0] ?? ticket.unit ?? null,
   deleteDailyPlan,
   deleteWeeklyPlan, // NEW
   upsertTicket,
+    deleteTicketsByDailyPlanId,
+  deleteTicketsByWeeklyPlanId,
 };
 };
