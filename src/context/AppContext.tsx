@@ -670,9 +670,6 @@ const confirmDailyTarget = useCallback((pid: string, swpId: string, wpId: string
             const target = wp.dailyPlans.find(dp => dp.id === dailyPlanId);
             if (!target) return wp;
 
-            // Engineer can delete only before forwarding
-            if (target.status !== 'pending') return wp;
-
             deletedDP = target;
 
             const restoredRemaining =
@@ -706,8 +703,6 @@ const updateDailyPlanByEngineer = useCallback((
   patch: Partial<DailyPlan>
 ) => {
   updateDailyPlan(projectId, sixWeekPlanId, weeklyPlanId, dailyPlanId, dp => {
-    // Engineer can edit only before forwarding
-    if (dp.status !== 'pending') return dp;
 
     return {
       ...dp,
@@ -729,7 +724,7 @@ const updateWeeklyPlanByAdmin = useCallback((
   patch: Partial<WeeklyPlan>
 ) => {
   let originalWP: WeeklyPlan | null = null;
-
+  console.log('check')
   projects.forEach(p => {
     if (p.id !== projectId) return;
     p.sixWeekPlans.forEach(swp => {
@@ -743,10 +738,10 @@ const updateWeeklyPlanByAdmin = useCallback((
   if (!originalWP) return;
 
   // optional safety: don't edit after confirmed execution
-  const hasLockedDaily = originalWP.dailyPlans.some(dp =>
-    dp.status === 'submitted' || dp.status === 'confirmed'
-  );
-  if (hasLockedDaily) return;
+  // const hasLockedDaily = originalWP.dailyPlans.some(dp =>
+  //   dp.status === 'submitted' || dp.status === 'confirmed'
+  // );
+  // if (hasLockedDaily) return;
 
   const oldQty = Number(originalWP.estimatedQuantity || 0);
   const newQty =
@@ -826,11 +821,11 @@ const deleteWeeklyPlanByAdmin = useCallback((
 
   if (!targetWP) return;
 
-  // optional safety: do not delete once progressed
-  const hasLockedDaily = targetWP.dailyPlans.some(dp =>
-    dp.status !== 'pending'
-  );
-  if (hasLockedDaily) return;
+  // // optional safety: do not delete once progressed
+  // const hasLockedDaily = targetWP.dailyPlans.some(dp =>
+  //   dp.status !== 'pending'
+  // );
+  // if (hasLockedDaily) return;
 
   setProjects(prev => prev.map(project => {
     if (project.id !== projectId) return project;

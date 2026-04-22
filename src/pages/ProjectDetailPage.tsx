@@ -130,11 +130,11 @@ const openEditWeeklyDialog = (swpId: string, wp: WeeklyPlan) => {
 
 const handleUpdateWeekly = () => {
   if (!showEditWeekly || !project) return;
-
+  
   const swp = project.sixWeekPlans.find(s => s.id === showEditWeekly.swpId);
   const wp = swp?.weeklyPlans.find(w => w.id === showEditWeekly.wpId);
   if (!swp || !wp) return;
-
+console.log("here", swp, wp)
   const qty = Number(editWpQty || 0);
   if (qty <= 0) {
     alert('Quantity must be greater than 0');
@@ -2347,8 +2347,9 @@ console.log(newPlansOnly, sixWeekPlansOnly)
 
       {/* Create Daily Plan (Engineer) — 6 days only */}
       <Dialog open={!!showCreateDaily} onOpenChange={() => setShowCreateDaily(null)}>
-        <DialogContent className="sm:max-w-4xl">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
           <DialogHeader><DialogTitle>Add Daily Plan (Mon-Sat)</DialogTitle></DialogHeader>
+            <div className="overflow-y-auto pr-2 space-y-4">
           {selectedWp && (
             <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
               <p className="text-xs font-semibold text-muted-foreground">
@@ -2574,6 +2575,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
             <Button onClick={handleCreateDaily} disabled={!dpDate || !dpQty} className="w-full">
               <Plus className="w-4 h-4" /> Add Daily Plan
             </Button>
+          </div>
           </div>
         </DialogContent>
       </Dialog>
