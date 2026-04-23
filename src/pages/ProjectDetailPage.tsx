@@ -43,7 +43,6 @@ const {
   addDailyPlan, updateDailyPlanByEngineer, deleteDailyPlanByEngineer,
   forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
   updateActivity2, updateWeeklyPlanField, updateWeeklyPlanByAdmin, deleteWeeklyPlanByAdmin,
-  evaluateCarryForward, createNextCarryForwardWeek, updateCarryForwardWeek,
   tickets, updateTicket, deleteSupervisorLog, updateSupervisorLog
 } = useAppContext();
 
@@ -55,11 +54,6 @@ const {
   const [expandedPlan, setExpandedPlan] = useState<string | null>(null);
   const [expandedWeekly, setExpandedWeekly] = useState<string | null>(null);
   const [showCreateDaily, setShowCreateDaily] = useState<{ swpId: string; wpId: string } | null>(null);
-  const [showEditCarryWeek, setShowEditCarryWeek] = useState<{ swpId: string; wpId: string } | null>(null);
-const [cfEditContractorId, setCfEditContractorId] = useState('');
-const [cfEditQty, setCfEditQty] = useState('');
-const [cfEditConstraint, setCfEditConstraint] = useState('');
-const [cfEditFloor, setCfEditFloor] = useState<string[]>([]);
 
   // 6-week plan form
   const [planName, setPlanName] = useState('');
@@ -356,6 +350,62 @@ const plan: SixWeekPlan = {
     setPlanName(''); setPlanStartDate(undefined); setPlanActivities([emptyActivity()]); setEditingActivityIdx(0);
   };
 
+  const getPlanAssignedActivityStats = (swp: SixWeekPlan) => {
+  const assignedTaskIds = new Set(
+    swp.weeklyPlans
+      .filter(wp => wp.assignedToEngineer)
+      .map(wp => wp.taskId)
+  );
+
+  const totalActivities = swp.activities.length;
+  const assignedActivities = swp.activities.filter(a => assignedTaskIds.has(a.id)).length;
+  const unassignedActivities = totalActivities - assignedActivities;
+
+  return {
+    assignedActivities,
+    unassignedActivities,
+    totalActivities,
+  };
+};
+
+const getWeekCycleLabel = (wp: WeeklyPlan, swp: SixWeekPlan) => {
+  const totalWeeks = swp.totalDurationWeeks || 6;
+  return `Week ${wp.weekNumber} of ${totalWeeks}`;
+};
+
+const getSubWeekActivityStats = (wp: WeeklyPlan, swp: SixWeekPlan) => {
+  const totalActivitiesCreatedInPlan = swp.activities.length;
+
+  const assignedActivitiesInThisSubWeek = swp.weeklyPlans.filter(
+    item => item.weekNumber === wp.weekNumber && item.assignedToEngineer
+  ).length;
+
+  const totalActivitiesCreatedInThisSubWeek = swp.weeklyPlans.filter(
+    item => item.weekNumber === wp.weekNumber
+  ).length;
+
+  return {
+    assignedActivitiesInThisSubWeek,
+    totalActivitiesCreatedInThisSubWeek,
+    totalActivitiesCreatedInPlan,
+  };
+};
+
+
+  const supervisorPlans = project.sixWeekPlans
+  .map(swp => ({
+    ...swp,
+    weeklyPlans: swp.weeklyPlans
+      .map(wp => ({
+        ...wp,
+        dailyPlans: wp.dailyPlans.filter(
+          dp => dp.status === 'forwarded' || dp.status === 'logged'
+        ),
+      }))
+      .filter(wp => wp.dailyPlans.length > 0),
+  }))
+  .filter(swp => swp.weeklyPlans.length > 0);
+
 
 
 const handleCreateWeekly = (sixWeekPlanId: string) => {
@@ -535,46 +585,7 @@ const assignedQty =
 const remainingQty = (selectedActivity?.estimatedQuantity || 0) - assignedQty;
 console.log(selectedActivity)
 
-const getNextCarryWeekLabel = (swp: SixWeekPlan) => {
-  const nextWeek = (swp.totalDurationWeeks || 6) + 1;
-  return nextWeek <= 9 ? `Create Week ${nextWeek}` : 'Max Week Reached';
-};
 
-const openCarryForwardEdit = (swpId: string, wp: WeeklyPlan) => {
-  setShowEditCarryWeek({ swpId, wpId: wp.id });
-  setCfEditContractorId(wp.contractorId || '');
-  setCfEditQty(String(wp.estimatedQuantity || 0));
-  setCfEditConstraint(wp.constraint || '');
-  setCfEditFloor(Array.isArray(wp.floorUnits) ? wp.floorUnits : []);
-};
-
-const handleSaveCarryForwardWeek = () => {
-  if (!showEditCarryWeek || !project) return;
-
-  const swp = project.sixWeekPlans.find(s => s.id === showEditCarryWeek.swpId);
-  const wp = swp?.weeklyPlans.find(w => w.id === showEditCarryWeek.wpId);
-  if (!swp || !wp) return;
-
-  const nextQty = Number(cfEditQty) || 0;
-  if (nextQty <= 0) {
-    alert('Quantity must be greater than 0');
-    return;
-  }
-
-  updateCarryForwardWeek(project.id, swp.id, wp.id, {
-    contractorId: cfEditContractorId,
-    estimatedQuantity: nextQty,
-    remainingQuantity: nextQty,
-    constraint: cfEditConstraint,
-    floorUnits: cfEditFloor,
-  });
-
-  setShowEditCarryWeek(null);
-  setCfEditContractorId('');
-  setCfEditQty('');
-  setCfEditConstraint('');
-  setCfEditFloor([]);
-};
 
 const sixWeekPlansOnly = project.sixWeekPlans.filter(
   swp => !swp.planType || swp.planType === 'six-week'
@@ -633,13 +644,18 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                   </span>
                   <span className="text-xs text-muted-foreground font-normal">{swp.startDate} → {swp.endDate}</span>
                 </CardTitle>
-               <p className="text-sm text-muted-foreground">
-  {swp.activities.length} activit{swp.activities.length === 1 ? 'y' : 'ies'} ·
-  {' '}Total Weeks: {swp.totalDurationWeeks || 6}
-  {swp.carryForwardAvailable && (
-    <span className="ml-2 text-amber-600 font-medium">Carry Forward Available</span>
-  )}
-</p>
+               {(() => {
+  const { assignedActivities, unassignedActivities, totalActivities } = getPlanAssignedActivityStats(swp);
+
+  return (
+    <p className="text-sm text-muted-foreground">
+      {totalActivities} activit{totalActivities === 1 ? 'y' : 'ies'} ·
+      {' '}Assigned: {assignedActivities} ·
+      {' '}Unassigned: {unassignedActivities} ·
+      {' '}Total Weeks: {swp.totalDurationWeeks || 6}
+    </p>
+  );
+})()}
               </CardHeader>
               {expandedPlan === swp.id && (
                 <CardContent className="space-y-3">
@@ -848,25 +864,6 @@ console.log(newPlansOnly, sixWeekPlansOnly)
     </Button>
   </div>
 
-  <div className="flex gap-2">
-    <Button
-      size="sm"
-      variant="secondary"
-      onClick={() => evaluateCarryForward(project.id, swp.id)}
-    >
-      Check Carry Forward
-    </Button>
-
-    {swp.carryForwardAvailable && (swp.totalDurationWeeks || 6) < 9 && (
-      <Button
-        size="sm"
-        variant="default"
-        onClick={() => createNextCarryForwardWeek(project.id, swp.id)}
-      >
-        {getNextCarryWeekLabel(swp)}
-      </Button>
-    )}
-  </div>
 </div>
                   {swp.weeklyPlans.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">No sub-week plans yet.</p>
@@ -878,32 +875,27 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                             <div className="flex items-center gap-3">
                               {expandedWeekly === wp.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                               <span className="font-mono text-xs text-muted-foreground">{wp.taskId}</span>
-                            <span className="text-sm font-medium flex items-center gap-2">
-  W{wp.weekNumber} · {wp.tradeActivity}
-  {wp.isCarryForwardWeek && (
-    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">
-      Carry Forward
-    </span>
-  )}
+                          <span className="text-sm font-medium flex items-center gap-2">
+  {getWeekCycleLabel(wp, swp)} · {wp.tradeActivity}
 </span>
-                              <span className="text-xs text-muted-foreground">{wp.estimatedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'} · {wp.floorUnits}</span>
+                             {(() => {
+  const {
+    assignedActivitiesInThisSubWeek,
+    totalActivitiesCreatedInThisSubWeek,
+  } = getSubWeekActivityStats(wp, swp);
+
+  return (
+    <span className="text-xs text-muted-foreground">
+      {wp.estimatedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'} ·
+      {' '}Activities Assigned: {assignedActivitiesInThisSubWeek}/{totalActivitiesCreatedInThisSubWeek} ·
+      {' '}Floor: {Array.isArray(wp.floorUnits) ? wp.floorUnits.join(', ') : wp.floorUnits}
+    </span>
+  );
+})()}
                             </div>
 <div className="flex items-center gap-2">
   <StatusBadge status={wp.status} />
 
-  {/* Carry-forward specific edit */}
-  {wp.isCarryForwardWeek && role === 'admin' && (
-    <Button
-      size="sm"
-      variant="outline"
-      onClick={e => {
-        e.stopPropagation();
-        openCarryForwardEdit(swp.id, wp);
-      }}
-    >
-      <Pencil className="w-3 h-3" /> Carry Edit
-    </Button>
-  )}
 
   {/* General admin edit for any sub-week */}
   <Button
@@ -1020,9 +1012,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                <p className="text-sm text-muted-foreground">
   {swp.activities.length} activit{swp.activities.length === 1 ? 'y' : 'ies'} ·
   {' '}Total Weeks: {swp.totalDurationWeeks || 6}
-  {swp.carryForwardAvailable && (
-    <span className="ml-2 text-amber-600 font-medium">Carry Forward Available</span>
-  )}
+  
 </p>
               </CardHeader>
               {expandedPlan === swp.id && (
@@ -1232,25 +1222,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
     </Button>
   </div>
 
-  <div className="flex gap-2">
-    <Button
-      size="sm"
-      variant="secondary"
-      onClick={() => evaluateCarryForward(project.id, swp.id)}
-    >
-      Check Carry Forward
-    </Button>
-
-    {swp.carryForwardAvailable && (swp.totalDurationWeeks || 6) < 9 && (
-      <Button
-        size="sm"
-        variant="default"
-        onClick={() => createNextCarryForwardWeek(project.id, swp.id)}
-      >
-        {getNextCarryWeekLabel(swp)}
-      </Button>
-    )}
-  </div>
+ 
 </div>
                   {swp.weeklyPlans.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">No sub-week plans yet.</p>
@@ -1264,30 +1236,11 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                               <span className="font-mono text-xs text-muted-foreground">{wp.taskId}</span>
                             <span className="text-sm font-medium flex items-center gap-2">
   W{wp.weekNumber} · {wp.tradeActivity}
-  {wp.isCarryForwardWeek && (
-    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">
-      Carry Forward
-    </span>
-  )}
 </span>
                               <span className="text-xs text-muted-foreground">{wp.estimatedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'} · {wp.floorUnits}</span>
                             </div>
 <div className="flex items-center gap-2">
   <StatusBadge status={wp.status} />
-
-  {/* Carry-forward specific edit */}
-  {wp.isCarryForwardWeek && role === 'admin' && (
-    <Button
-      size="sm"
-      variant="outline"
-      onClick={e => {
-        e.stopPropagation();
-        openCarryForwardEdit(swp.id, wp);
-      }}
-    >
-      <Pencil className="w-3 h-3" /> Carry Edit
-    </Button>
-  )}
 
   {/* General admin edit for any sub-week */}
   <Button
@@ -1576,86 +1529,205 @@ console.log(newPlansOnly, sixWeekPlansOnly)
       )}
 
       {/* =================== SUPERVISOR VIEW =================== */}
-      {role === 'supervisor' && (
-        <div className="space-y-4">
-          <h2 className="font-semibold text-lg">Daily Task Logs</h2>
-          {allDailyPlans.filter(dp => dp.status === 'forwarded' || dp.status === 'logged').length === 0 ? (
-            <p className="text-muted-foreground text-sm">No daily tasks forwarded yet.</p>
-          ) : (
-            <div className="bg-card rounded-lg border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-primary/5">
-                    <TableHead className="font-semibold">Task</TableHead>
-                    <TableHead className="font-semibold">Day</TableHead>
-                    <TableHead className="font-semibold">Date</TableHead>
-                    <TableHead className="font-semibold">Trade</TableHead>
-                    <TableHead className="font-semibold">Target</TableHead>
-                    <TableHead className="font-semibold">Floor</TableHead>
-                    <TableHead className="font-semibold">Constraint</TableHead>
-                     <TableHead className="font-semibold">Engineer Comments</TableHead>
-                      <TableHead className="font-semibold">ROV</TableHead>
-                    {/* <TableHead className="font-semibold">Status</TableHead> */}
-                    <TableHead className="font-semibold">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {allDailyPlans.filter(dp => dp.status === 'forwarded' || dp.status === 'logged').map(dp => (
-                    <TableRow key={dp.id}>
-                      <TableCell className="font-mono text-xs">{dp.taskId}</TableCell>
-                      <TableCell className="text-xs">{DAY_NAMES[dp.dayNumber - 1]}</TableCell>
-                      <TableCell className="text-xs">{dp.date}</TableCell>
-                      <TableCell className="text-sm font-medium">{dp.tradeActivity}</TableCell>
-                      <TableCell className="text-sm">{dp.plannedQuantity} {dp.weekUnit}</TableCell>
-                      <TableCell className="text-xs">{dp.floorUnits}</TableCell>
-                      <TableCell className="text-xs">{dp.constraint || '—'}</TableCell>
-                      <TableCell className="text-xs">{dp.engineerNote || '—'}</TableCell>
-                      <TableCell className="text-xs">{dp.rov || '—'}</TableCell>
-                      {/* <TableCell><StatusBadge status={dp.status} /></TableCell> */}
-                      <TableCell>
-  {dp.status === 'forwarded' && (
-    <Button
-      size="sm"
-      variant="outline"
-      onClick={() => openSupervisorLogDialog(dp.sixWeekPlanId, dp.weeklyPlanId, dp, 'create')}
-    >
-      Log Qty / ROV
-    </Button>
-  )}
+{role === 'supervisor' && (
+  <div className="space-y-4">
+    <h2 className="font-semibold text-lg">Supervisor Task View</h2>
 
-  {dp.status === 'logged' && (
-    <div className="flex items-center gap-2">
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => openSupervisorLogDialog(dp.sixWeekPlanId, dp.weeklyPlanId, dp, 'edit')}
-      >
-        <Pencil className="w-3 h-3" /> Edit
-      </Button>
+    {supervisorPlans.length === 0 ? (
+      <p className="text-muted-foreground text-sm">No daily tasks forwarded yet.</p>
+    ) : (
+      <div className="space-y-4">
+        {supervisorPlans.map(swp => (
+          <Card key={swp.id}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center justify-between">
+                <span>{swp.name}</span>
+                <span className="text-xs text-muted-foreground font-normal">
+                  {swp.startDate} → {swp.endDate}
+                </span>
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {swp.buildingName} · Total Weeks: {swp.totalDurationWeeks || 6}
+              </p>
+            </CardHeader>
 
-      <Button
-        size="sm"
-        variant="outline"
-        className="text-destructive"
-        onClick={() => {
-          const ok = window.confirm('Delete supervisor log and move task back to forwarded state?');
-          if (!ok) return;
-          deleteSupervisorLog(project.id, dp.sixWeekPlanId, dp.weeklyPlanId, dp.id);
-        }}
-      >
-        <Trash2 className="w-3 h-3" /> Delete
-      </Button>
-    </div>
-  )}
-</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </div>
-      )}
+            <CardContent className="space-y-3">
+              {swp.weeklyPlans.map(wp => (
+                <div key={wp.id} className="border rounded-lg">
+                  <div
+                    className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/30"
+                    onClick={() => setExpandedWeekly(expandedWeekly === wp.id ? null : wp.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      {expandedWeekly === wp.id ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
+
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {wp.taskId}
+                      </span>
+
+                      <span className="text-sm font-medium">
+                        Week {wp.weekNumber} · {wp.tradeActivity}
+                      </span>
+
+                      <span className="text-xs text-muted-foreground">
+                        {wp.estimatedQuantity}{' '}
+                        {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'}
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-muted-foreground">
+                      Contractor: {getContractorName(wp.contractorId)}
+                    </div>
+                  </div>
+
+                  {expandedWeekly === wp.id && (
+                    <div className="px-3 pb-3">
+                      <div className="mb-2 text-xs text-muted-foreground">
+                        Constraint: {wp.constraint || 'None'}
+                        {wp.constraintDate ? ` · Date: ${wp.constraintDate}` : ''}
+                        {wp.responsiblePerson ? ` · Person: ${wp.responsiblePerson}` : ''}
+                      </div>
+
+                      <div className="bg-card rounded-lg border overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-primary/5">
+                              <TableHead className="font-semibold">Day</TableHead>
+                              <TableHead className="font-semibold">Date</TableHead>
+                              <TableHead className="font-semibold">Target</TableHead>
+                              <TableHead className="font-semibold">Actual</TableHead>
+                              <TableHead className="font-semibold">Remaining</TableHead>
+                              <TableHead className="font-semibold">Floor</TableHead>
+                              <TableHead className="font-semibold">Constraint</TableHead>
+                              <TableHead className="font-semibold">Engineer Comments</TableHead>
+                              <TableHead className="font-semibold">ROV</TableHead>
+                              <TableHead className="font-semibold">Status</TableHead>
+                              <TableHead className="font-semibold">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+
+                          <TableBody>
+                            {wp.dailyPlans.map(dp => (
+                              <TableRow key={dp.id}>
+                                <TableCell className="text-xs">
+                                  {DAY_NAMES[dp.dayNumber - 1]}
+                                </TableCell>
+
+                                <TableCell className="text-xs">{dp.date}</TableCell>
+
+                                <TableCell className="text-xs">
+                                  {dp.plannedQuantity}{' '}
+                                  {(dp.units?.length ? dp.units.join(', ') : wp.unit) || '—'}
+                                </TableCell>
+
+                                <TableCell className="text-xs">
+                                  {dp.completedQuantity !== undefined
+                                    ? `${dp.completedQuantity} ${(dp.units?.length ? dp.units.join(', ') : wp.unit) || '—'}`
+                                    : '—'}
+                                </TableCell>
+
+                                <TableCell className="text-xs">
+                                  {dp.remainingQuantity ?? '—'}
+                                </TableCell>
+
+                                <TableCell className="text-xs">
+                                  {Array.isArray(dp.floorUnits) ? dp.floorUnits.join(', ') : dp.floorUnits || '—'}
+                                </TableCell>
+
+                                <TableCell className="text-xs">
+                                  <div>{dp.constraint || '—'}</div>
+                                  {(dp.constraintDate || dp.responsiblePerson) && (
+                                    <div className="text-[11px] text-muted-foreground mt-1">
+                                      {dp.constraintDate && <div>Date: {dp.constraintDate}</div>}
+                                      {dp.responsiblePerson && <div>Person: {dp.responsiblePerson}</div>}
+                                    </div>
+                                  )}
+                                </TableCell>
+
+                                <TableCell className="text-xs">
+                                  {dp.engineerNote || '—'}
+                                </TableCell>
+
+                                <TableCell className="text-xs">
+                                  {dp.rov || 'None'}
+                                </TableCell>
+
+                                <TableCell>
+                                  <StatusBadge status={dp.status} />
+                                </TableCell>
+
+                                <TableCell>
+                                  {dp.status === 'forwarded' && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() =>
+                                        openSupervisorLogDialog(
+                                          swp.id,
+                                          wp.id,
+                                          dp,
+                                          'create'
+                                        )
+                                      }
+                                    >
+                                      Log Qty / ROV
+                                    </Button>
+                                  )}
+
+                                  {dp.status === 'logged' && (
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() =>
+                                          openSupervisorLogDialog(
+                                            swp.id,
+                                            wp.id,
+                                            dp,
+                                            'edit'
+                                          )
+                                        }
+                                      >
+                                        <Pencil className="w-3 h-3" /> Edit
+                                      </Button>
+
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-destructive"
+                                        onClick={() => {
+                                          const ok = window.confirm(
+                                            'Delete supervisor log and move task back to forwarded state?'
+                                          );
+                                          if (!ok) return;
+                                          deleteSupervisorLog(project.id, swp.id, wp.id, dp.id);
+                                        }}
+                                      >
+                                        <Trash2 className="w-3 h-3" /> Delete
+                                      </Button>
+                                    </div>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )}
+  </div>
+)}
 
 {showTickets && (
   <Dialog open={showTickets} onOpenChange={setShowTickets}>
@@ -2761,126 +2833,6 @@ console.log(newPlansOnly, sixWeekPlansOnly)
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog open={!!showEditCarryWeek} onOpenChange={() => setShowEditCarryWeek(null)}>
-  <DialogContent className="sm:max-w-3xl">
-    <DialogHeader>
-      <DialogTitle>Edit Carry-Forward Week</DialogTitle>
-    </DialogHeader>
-
-    {showEditCarryWeek && (() => {
-      const swp = project.sixWeekPlans.find(s => s.id === showEditCarryWeek.swpId);
-      const wp = swp?.weeklyPlans.find(w => w.id === showEditCarryWeek.wpId);
-      if (!swp || !wp) return null;
-
-      return (
-        <div className="space-y-4">
-          <div className="rounded-lg border bg-muted/20 p-3">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-              <span className="text-muted-foreground">Week:</span>
-              <span>Week {wp.weekNumber}</span>
-
-              <span className="text-muted-foreground">Trade Activity:</span>
-              <span>{wp.tradeActivity}</span>
-
-              <span className="text-muted-foreground">Current Qty:</span>
-              <span>{wp.estimatedQuantity} {wp.unit}</span>
-
-              <span className="text-muted-foreground">Status:</span>
-              <span>{wp.status}</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Contractor</Label>
-              <Select value={cfEditContractorId} onValueChange={setCfEditContractorId}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select contractor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {contractors.map(c => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Estimated Quantity</Label>
-              <Input
-                type="number"
-                step="any"
-                value={cfEditQty}
-                onChange={e => setCfEditQty(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label>Constraint</Label>
-            <Select value={cfEditConstraint} onValueChange={setCfEditConstraint}>
-              <SelectTrigger className="mt-1">
-                <SelectValue placeholder="Select constraint" />
-              </SelectTrigger>
-              <SelectContent>
-                {CONSTRAINTS.map(c => (
-                  <SelectItem key={c} value={c}>{c}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label>Floor Units</Label>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="w-full mt-1 justify-between">
-                  {cfEditFloor?.length ? cfEditFloor.join(', ') : 'Select Floor Units'}
-                </Button>
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
-                {(wp.floorUnits || []).map((f) => {
-                  const checked = cfEditFloor.includes(f);
-
-                  return (
-                    <div key={f} className="flex items-center gap-2 px-2 py-1">
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={(isChecked) => {
-                          let updated: string[];
-                          if (isChecked) {
-                            updated = [...cfEditFloor, f];
-                          } else {
-                            updated = cfEditFloor.filter(item => item !== f);
-                          }
-                          setCfEditFloor(updated);
-                        }}
-                      />
-                      <span className="text-sm">{f}</span>
-                    </div>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowEditCarryWeek(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveCarryForwardWeek}>
-              Save Changes
-            </Button>
-          </div>
-        </div>
-      );
-    })()}
-  </DialogContent>
-</Dialog>
     </div>
   );
 };
