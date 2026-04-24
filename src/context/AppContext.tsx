@@ -1,5 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import type { Role, Project, SixWeekPlan, WeeklyPlan, DailyPlan, Contractor, PlanActivity, Ticket } from '@/types/planner';
+import type {
+  Role,
+  Project,
+  SixWeekPlan,
+  WeeklyPlan,
+  DailyPlan,
+  Contractor,
+  PlanActivity,
+  Ticket,
+  BacklogItem
+} from '@/types/planner';
 import { DEFAULT_CONTRACTORS } from '@/types/planner';
 import { useAuth } from '@/hooks/useAuth';
 import { useSupabaseData } from '@/hooks/useSupabaseData';
@@ -69,6 +79,21 @@ deleteSupervisorLog: (
   dailyPlanId: string
 ) => void;
 
+backlogs: BacklogItem[];
+
+generateWeeklyBacklog: (
+  projectId: string,
+  sixWeekPlanId: string,
+  weeklyPlanId: string
+) => void;
+
+applyBacklogToNextWeek: (
+  projectId: string,
+  sixWeekPlanId: string,
+  sourceWeeklyPlanId: string,
+  targetWeekNumber: number
+) => void;
+
   syncing: boolean;
 }
 
@@ -112,6 +137,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [backlogs, setBacklogs] = useState<BacklogItem[]>(() => {
+  const saved = localStorage.getItem(STORAGE_KEY + '-backlogs');
+  return saved ? JSON.parse(saved) : [];
+});
+useEffect(() => {
+  localStorage.setItem(STORAGE_KEY + '-backlogs', JSON.stringify(backlogs));
+}, [backlogs]);
+
   // Save to localStorage as fallback
   useEffect(() => { localStorage.setItem(STORAGE_KEY + '-contractors', JSON.stringify(contractors)); }, [contractors]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY + '-projects', JSON.stringify(projects)); }, [projects]);
@@ -123,14 +156,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const load = async () => {
       setSyncing(true);
       try {
-        const [sbProjects, sbContractors, sbTickets] = await Promise.all([
-          sb.fetchAllProjects(),
-          sb.fetchContractors(),
-          sb.fetchTickets(),
-        ]);
+       const [sbProjects, sbContractors, sbTickets, sbBacklogs] = await Promise.all([
+  sb.fetchAllProjects(),
+  sb.fetchContractors(),
+  sb.fetchTickets(),
+  sb.fetchBacklogs(),
+]);
         if (sbProjects.length > 0) setProjects(sbProjects);
         if (sbTickets.length > 0) setTickets(sbTickets);
-
+if (sbBacklogs.length > 0) setBacklogs(sbBacklogs);
         // Seed default contractors to Supabase if none exist
         if (sbContractors.length > 0) {
           setContractors(sbContractors);
@@ -182,6 +216,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sb.upsertTicket(ticket).catch(console.error);
   }, [user, sb]);
 
+  const syncBacklog = useCallback((backlog: BacklogItem) => {
+  if (!user) return;
+  sb.upsertBacklog(backlog).catch(console.error);
+}, [user, sb]);
+
   const getWeeklyPlanCompletedQuantity = (wp: WeeklyPlan) =>
   wp.dailyPlans.reduce((sum, dp) => sum + (dp.completedQuantity || 0), 0);
 
@@ -229,7 +268,8 @@ const buildCarryForwardWeeklyPlan = (
   category: activity.category,
   contractorId: activity.contractorId,
   tradeActivity: activity.tradeActivity,
-  unit: activity.unit,
+  units: activity.units || (activity.unit ? [activity.unit] : []),
+  unit: activity.units?.[0] || activity.unit,
   estimatedQuantity: activity.remainingQuantity || 0,
   completedQuantity: 0,
   floorUnits: activity.floorUnits,
@@ -238,6 +278,7 @@ const buildCarryForwardWeeklyPlan = (
   assignedToEngineer: false,
   remainingQuantity: activity.remainingQuantity || 0,
   dailyPlans: [],
+  isCarryForwardWeek: true,
   sourceActivityId: activity.id,
   sourceWeekNumber: nextWeekNumber - 1,
 } as WeeklyPlan);
@@ -478,7 +519,8 @@ const confirmDailyTarget = useCallback((pid: string, swpId: string, wpId: string
       shortfallQuantity: shortfall,
       recoveryId: `REC-${Date.now()}`,
       contractorName: wp.contractorId,
-      unit: dp.unit,
+      units: dp.units || (dp.unit ? [dp.unit] : wp.units || []),
+unit: dp.units?.[0] || dp.unit || wp.unit,
       rov,
       assignedTo: 'engineer',
       status: 'open'
@@ -764,14 +806,262 @@ const deleteWeeklyPlanByAdmin = useCallback((
   }
 }, [projects, syncActivity, user, sb]);
 
+
+const generateWeeklyBacklog = useCallback((
+  projectId: string,
+  sixWeekPlanId: string,
+  weeklyPlanId: string
+) => {
+  const newBacklogs: BacklogItem[] = [];
+
+  setProjects(prev => {
+    prev.forEach(project => {
+      if (project.id !== projectId) return;
+
+      project.sixWeekPlans.forEach(swp => {
+        if (swp.id !== sixWeekPlanId) return;
+
+        const wp = swp.weeklyPlans.find(w => w.id === weeklyPlanId);
+        if (!wp) return;
+
+        wp.dailyPlans.forEach(dp => {
+          if (dp.status !== 'confirmed' && dp.status !== 'logged' && dp.status !== 'submitted') return;
+
+          const planned = Number(dp.plannedQuantity || 0);
+          const completed = Number(dp.completedQuantity || 0);
+          const shortfall = Math.max(0, planned - completed);
+
+          if (shortfall <= 0) return;
+
+          const breakdown = getDailyShortfallBreakdown(dp, wp);
+
+          breakdown.forEach(item => {
+            newBacklogs.push({
+              id: crypto.randomUUID(),
+              projectId,
+              sixWeekPlanId,
+              sourceWeeklyPlanId: wp.id,
+              sourceWeekNumber: wp.weekNumber,
+              sourceDailyPlanId: dp.id,
+
+              activityId: wp.taskId,
+              tradeActivity: wp.tradeActivity,
+              contractorId: wp.contractorId,
+
+              floorUnit: item.floorUnit,
+              unit: item.unit,
+
+              plannedQuantity: planned,
+              completedQuantity: completed,
+              shortfallQuantity: item.shortfallQuantity,
+
+              status: 'open',
+              createdAt: new Date().toISOString(),
+            });
+          });
+        });
+      });
+    });
+
+    return prev;
+  });
+
+  if (newBacklogs.length === 0) return;
+
+  setBacklogs(prev => {
+    // avoid duplicates for same daily/floor/unit
+    const existingKeys = new Set(
+      prev.map(b => `${b.sourceDailyPlanId}-${b.floorUnit}-${b.unit}`)
+    );
+
+    const deduped = newBacklogs.filter(
+      b => !existingKeys.has(`${b.sourceDailyPlanId}-${b.floorUnit}-${b.unit}`)
+    );
+
+    deduped.forEach(syncBacklog);
+    return [...prev, ...deduped];
+  });
+}, [syncBacklog]);
+
+const applyBacklogToNextWeek = useCallback((
+  projectId: string,
+  sixWeekPlanId: string,
+  sourceWeeklyPlanId: string,
+  targetWeekNumber: number
+) => {
+  let updatedBacklogs: BacklogItem[] = [];
+  let newOrUpdatedWeeklyPlans: WeeklyPlan[] = [];
+
+  const openBacklogs = backlogs.filter(
+    b =>
+      b.projectId === projectId &&
+      b.sixWeekPlanId === sixWeekPlanId &&
+      b.sourceWeeklyPlanId === sourceWeeklyPlanId &&
+      b.status === 'open'
+  );
+
+  if (openBacklogs.length === 0) return;
+
+  setProjects(prev => prev.map(project => {
+    if (project.id !== projectId) return project;
+
+    return {
+      ...project,
+      sixWeekPlans: project.sixWeekPlans.map(swp => {
+        if (swp.id !== sixWeekPlanId) return swp;
+
+        let weeklyPlans = [...swp.weeklyPlans];
+
+        const grouped = openBacklogs.reduce((acc, item) => {
+          const key = `${item.activityId}-${item.floorUnit}-${item.unit}`;
+          acc[key] = acc[key] || [];
+          acc[key].push(item);
+          return acc;
+        }, {} as Record<string, BacklogItem[]>);
+
+        Object.values(grouped).forEach(items => {
+          const first = items[0];
+          const qty = items.reduce((sum, x) => sum + x.shortfallQuantity, 0);
+
+          const existingTarget = weeklyPlans.find(
+            wp =>
+              wp.weekNumber === targetWeekNumber &&
+              wp.taskId === first.activityId
+          );
+
+          if (existingTarget) {
+            const mergedFloors = Array.from(
+              new Set([...(existingTarget.floorUnits || []), first.floorUnit])
+            );
+
+            const mergedUnits = Array.from(
+              new Set([...(existingTarget.units || []), first.unit])
+            );
+
+            const updated: WeeklyPlan = {
+              ...existingTarget,
+              estimatedQuantity: Number(existingTarget.estimatedQuantity || 0) + qty,
+              remainingQuantity: Number(existingTarget.remainingQuantity || 0) + qty,
+              floorUnits: mergedFloors,
+              units: mergedUnits,
+              isCarryForwardWeek: true,
+            };
+
+            weeklyPlans = weeklyPlans.map(wp =>
+              wp.id === existingTarget.id ? updated : wp
+            );
+
+            newOrUpdatedWeeklyPlans.push(updated);
+
+            updatedBacklogs.push(
+              ...items.map(b => ({
+                ...b,
+                status: 'carried_forward' as const,
+                targetWeeklyPlanId: updated.id,
+                targetWeekNumber,
+                carriedForwardAt: new Date().toISOString(),
+              }))
+            );
+          } else {
+            const activity = swp.activities.find(a => a.id === first.activityId);
+            if (!activity) return;
+
+            const newWp: WeeklyPlan = {
+              id: crypto.randomUUID(),
+              sixWeekPlanId: swp.id,
+              weekNumber: targetWeekNumber,
+              taskId: activity.id,
+              category: activity.category,
+              contractorId: activity.contractorId,
+              tradeActivity: activity.tradeActivity,
+              units: [first.unit],
+              unit: first.unit,
+              estimatedQuantity: qty,
+              remainingQuantity: qty,
+              floorUnits: [first.floorUnit],
+              constraint: 'Carry forward from previous week',
+              status: 'pending',
+              assignedToEngineer: false,
+              dailyPlans: [],
+              isCarryForwardWeek: true,
+              sourceWeekNumber: first.sourceWeekNumber,
+              sourceActivityId: first.activityId,
+            };
+
+            weeklyPlans.push(newWp);
+            newOrUpdatedWeeklyPlans.push(newWp);
+
+            updatedBacklogs.push(
+              ...items.map(b => ({
+                ...b,
+                status: 'carried_forward' as const,
+                targetWeeklyPlanId: newWp.id,
+                targetWeekNumber,
+                carriedForwardAt: new Date().toISOString(),
+              }))
+            );
+          }
+        });
+
+        return {
+          ...swp,
+          weeklyPlans,
+        };
+      })
+    };
+  }));
+
+  newOrUpdatedWeeklyPlans.forEach(syncWeeklyPlan);
+
+  setBacklogs(prev =>
+    prev.map(b => {
+      const updated = updatedBacklogs.find(x => x.id === b.id);
+      if (!updated) return b;
+      syncBacklog(updated);
+      return updated;
+    })
+  );
+}, [backlogs, syncWeeklyPlan, syncBacklog]);
+
   return (
 <AppContext.Provider value={{
-  role, contractors, addContractor,
-  projects, createProject, activeProjectId, setActiveProjectId,
-  addSixWeekPlan, updateSixWeekPlanActivities, addWeeklyPlan, assignToEngineer,
-  addDailyPlan, updateDailyPlanByEngineer, deleteDailyPlanByEngineer,
-  forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
-  tickets, updateActivity2, updateWeeklyPlanField, updateWeeklyPlanByAdmin, deleteWeeklyPlanByAdmin, updateTicket,deleteSupervisorLog,
+  role,
+  contractors,
+  addContractor,
+  projects,
+  createProject,
+  activeProjectId,
+  setActiveProjectId,
+
+  addSixWeekPlan,
+  updateSixWeekPlanActivities,
+  addWeeklyPlan,
+  assignToEngineer,
+  addDailyPlan,
+
+  updateDailyPlanByEngineer,
+  deleteDailyPlanByEngineer,
+
+  forwardDailyToSupervisor,
+  logDailyTarget,
+  submitDailyTarget,
+  confirmDailyTarget,
+
+  tickets,
+  updateTicket,
+
+  updateActivity2,
+  updateWeeklyPlanField,
+  updateWeeklyPlanByAdmin,
+  deleteWeeklyPlanByAdmin,
+
+  updateSupervisorLog,
+  deleteSupervisorLog,
+
+  backlogs,
+  generateWeeklyBacklog,
+  applyBacklogToNextWeek,
+
   syncing
 }}>
       {children}

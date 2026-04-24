@@ -311,6 +311,57 @@ const deleteTicketsByWeeklyPlanId = useCallback(async (weeklyPlanId: string) => 
   await supabase.from('tickets').delete().eq('weekly_plan_id', weeklyPlanId);
 }, []);
 
+
+const fetchBacklogs = useCallback(async (): Promise<BacklogItem[]> => {
+  const { data } = await supabase.from('weekly_backlogs').select('*');
+
+  return (data || []).map(row => ({
+    id: row.id,
+    projectId: row.project_id,
+    sixWeekPlanId: row.six_week_plan_id,
+    sourceWeeklyPlanId: row.source_weekly_plan_id,
+    sourceWeekNumber: row.source_week_number,
+    sourceDailyPlanId: row.source_daily_plan_id || undefined,
+    targetWeeklyPlanId: row.target_weekly_plan_id || undefined,
+    targetWeekNumber: row.target_week_number || undefined,
+    activityId: row.activity_id,
+    tradeActivity: row.trade_activity,
+    contractorId: row.contractor_id || '',
+    floorUnit: row.floor_unit,
+    unit: row.unit,
+    plannedQuantity: Number(row.planned_quantity),
+    completedQuantity: Number(row.completed_quantity),
+    shortfallQuantity: Number(row.shortfall_quantity),
+    status: row.status,
+    createdAt: row.created_at,
+    carriedForwardAt: row.carried_forward_at || undefined,
+  }));
+}, []);
+
+const upsertBacklog = useCallback(async (b: BacklogItem) => {
+  await supabase.from('weekly_backlogs').upsert({
+    id: b.id,
+    project_id: b.projectId,
+    six_week_plan_id: b.sixWeekPlanId,
+    source_weekly_plan_id: b.sourceWeeklyPlanId,
+    source_week_number: b.sourceWeekNumber,
+    source_daily_plan_id: b.sourceDailyPlanId || null,
+    target_weekly_plan_id: b.targetWeeklyPlanId || null,
+    target_week_number: b.targetWeekNumber || null,
+    activity_id: b.activityId,
+    trade_activity: b.tradeActivity,
+    contractor_id: toUuidOrNull(b.contractorId),
+    floor_unit: b.floorUnit,
+    unit: b.unit,
+    planned_quantity: b.plannedQuantity,
+    completed_quantity: b.completedQuantity,
+    shortfall_quantity: b.shortfallQuantity,
+    status: b.status,
+    created_at: b.createdAt,
+    carried_forward_at: b.carriedForwardAt || null,
+  });
+}, []);
+
  return {
   fetchAllProjects,
   fetchFullProject,
@@ -327,5 +378,7 @@ const deleteTicketsByWeeklyPlanId = useCallback(async (weeklyPlanId: string) => 
   upsertTicket,
     deleteTicketsByDailyPlanId,
   deleteTicketsByWeeklyPlanId,
+  upsertBacklog,
+  fetchBacklogs
 };
 };

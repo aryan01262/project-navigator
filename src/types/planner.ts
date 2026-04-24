@@ -128,7 +128,34 @@ responsiblePerson?: string;
 //   sourceActivityId?: string;
   
 // }
+export interface BacklogItem {
+  id: string;
 
+  projectId: string;
+  sixWeekPlanId: string;
+  sourceWeeklyPlanId: string;
+  sourceWeekNumber: number;
+  sourceDailyPlanId?: string;
+
+  targetWeeklyPlanId?: string;
+  targetWeekNumber?: number;
+
+  activityId: string;
+  tradeActivity: string;
+  contractorId: string;
+
+  floorUnit: string;
+  unit: string;
+
+  plannedQuantity: number;
+  completedQuantity: number;
+  shortfallQuantity: number;
+
+  status: 'open' | 'carried_forward' | 'closed';
+
+  createdAt: string;
+  carriedForwardAt?: string;
+}
 export interface WeeklyPlan {
   id: string;
   sixWeekPlanId: string;

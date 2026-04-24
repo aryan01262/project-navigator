@@ -20,6 +20,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/compon
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useTranslation } from 'react-i18next';
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const emptyActivity = (): PlanActivity => ({
@@ -34,7 +35,9 @@ const emptyActivity = (): PlanActivity => ({
   remainingQuantity: 0,
 });
 
+
 const ProjectDetailPage = () => {
+  const { t, i18n } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
 const {
@@ -43,7 +46,9 @@ const {
   addDailyPlan, updateDailyPlanByEngineer, deleteDailyPlanByEngineer,
   forwardDailyToSupervisor, logDailyTarget, submitDailyTarget, confirmDailyTarget,
   updateActivity2, updateWeeklyPlanField, updateWeeklyPlanByAdmin, deleteWeeklyPlanByAdmin,
-  tickets, updateTicket, deleteSupervisorLog, updateSupervisorLog
+  tickets, updateTicket, deleteSupervisorLog, updateSupervisorLog,  backlogs,
+  generateWeeklyBacklog,
+  applyBacklogToNextWeek
 } = useAppContext();
 
   const project = projects.find(p => p.id === projectId);
@@ -594,19 +599,75 @@ const sixWeekPlansOnly = project.sixWeekPlans.filter(
 const newPlansOnly = project.sixWeekPlans.filter(
   swp => swp.planType === 'new-plan'
 );
-console.log(newPlansOnly, sixWeekPlansOnly)
+const getDailyShortfallBreakdown = (dp: DailyPlan, wp: WeeklyPlan) => {
+  const planned = Number(dp.plannedQuantity || 0);
+  const completed = Number(dp.completedQuantity || 0);
+  const shortfall = Math.max(0, planned - completed);
+
+  if (shortfall <= 0) return [];
+
+  const floors = dp.floorUnits?.length ? dp.floorUnits : wp.floorUnits;
+  const units = dp.units?.length ? dp.units : wp.units?.length ? wp.units : wp.unit ? [wp.unit] : [];
+
+  const combinations = floors.flatMap(floor =>
+    units.map(unit => ({ floor, unit }))
+  );
+
+  if (combinations.length === 0) return [];
+
+  const splitQty = shortfall / combinations.length;
+
+  return combinations.map(x => ({
+    floorUnit: x.floor,
+    unit: x.unit,
+    shortfallQuantity: splitQty,
+  }));
+};
+const canCloseWeek = (wp: WeeklyPlan) => {
+  return (
+    wp.dailyPlans.length > 0 &&
+    wp.dailyPlans.every(dp =>
+      dp.status === 'confirmed' ||
+      dp.status === 'submitted' ||
+      dp.status === 'logged'
+    )
+  );
+};
+
+const getBacklogsForProject = () =>
+  backlogs.filter(b => b.projectId === project.id);
+
+const getOpenBacklogsForProject = () =>
+  backlogs.filter(b => b.projectId === project.id && b.status === 'open');
+
+const getBacklogsForWeek = (weeklyPlanId: string) =>
+  backlogs.filter(b => b.sourceWeeklyPlanId === weeklyPlanId);
+
+const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
+  backlogs.some(b => b.sourceWeeklyPlanId === weeklyPlanId && b.status === 'open');
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
         <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
-          <ArrowLeft className="w-4 h-4" /> Back
+           <ArrowLeft className="w-4 h-4" /> {t('back')}
         </Button>
         <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
+      
         {role === 'admin' && (
           <Button variant="outline" size="sm" className="ml-auto" onClick={() => navigate(`/projects/${projectId}/reports`)}>
-            <BarChart3 className="w-4 h-4" /> Reports
+            <BarChart3 className="w-4 h-4" /> {t('reports')}
           </Button>
         )}
+          <Select value={i18n.language} onValueChange={(lng) => i18n.changeLanguage(lng)}>
+  <SelectTrigger className="w-[160px]">
+    <SelectValue placeholder="Language" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="en">English</SelectItem>
+    <SelectItem value="hi">हिन्दी</SelectItem>
+    <SelectItem value="mr">मराठी</SelectItem>
+  </SelectContent>
+</Select>
       </div>
 
       {/* =================== ADMIN VIEW =================== */}
@@ -615,8 +676,8 @@ console.log(newPlansOnly, sixWeekPlansOnly)
  <Tabs value={planTab} onValueChange={(v) => setPlanTab(v as 'six-week' | 'new-plan')} className="space-y-4">
   <div className="flex items-center justify-between">
     <TabsList>
-      <TabsTrigger value="six-week">6 Week Plan</TabsTrigger>
-      <TabsTrigger value="new-plan">New Plan</TabsTrigger>
+      <TabsTrigger value="six-week">{t('sixWeekPlan')}</TabsTrigger>
+      <TabsTrigger value="new-plan">{t('newPlan')}</TabsTrigger>
     </TabsList>
 
     <Button
@@ -673,7 +734,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                           <TableHead className="text-xs">Est. Qty</TableHead>
                           <TableHead className="text-xs">Rem. Qty</TableHead>
                           <TableHead className="text-xs">Floor</TableHead>
-                          <TableHead className="text-xs w-20">Actions</TableHead>
+                          <TableHead className="text-xs w-20">{t('actions')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -834,7 +895,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
 
                       </div>
                       <div className="flex gap-2 justify-end">
-                        <Button size="sm" variant="outline" onClick={() => { setEditingId(null); setEditData(null); }}>Cancel</Button>
+                        <Button size="sm" variant="outline" onClick={() => { setEditingId(null); setEditData(null); }}>{t('cancel')}</Button>
                         <Button size="sm" onClick={() => {
                           const updated = swp.activities.map(a => a.id === editingId ? editData : a);
                           updateSixWeekPlanActivities(project.id, swp.id, updated);
@@ -856,11 +917,11 @@ console.log(newPlansOnly, sixWeekPlansOnly)
         setEditData({ ...newAct });
       }}
     >
-      <Plus className="w-3 h-3" /> Add Activity
+      <Plus className="w-3 h-3" /> {t('addActivity')}
     </Button>
 
     <Button size="sm" onClick={() => setShowCreateWeekly(swp.id)}>
-      <Plus className="w-4 h-4" /> Sub-Week Plan
+      <Plus className="w-4 h-4" /> {t('subWeekPlan')}
     </Button>
   </div>
 
@@ -895,7 +956,44 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                             </div>
 <div className="flex items-center gap-2">
   <StatusBadge status={wp.status} />
+{canCloseWeek(wp) && (
+  <Button
+    size="sm"
+    variant="secondary"
+    onClick={(e) => {
+      e.stopPropagation();
 
+      const ok = window.confirm(
+        `Close Week ${wp.weekNumber} and generate backlog?`
+      );
+
+      if (!ok) return;
+
+      generateWeeklyBacklog(project.id, swp.id, wp.id);
+    }}
+  >
+    Close Week
+  </Button>
+)}
+
+{hasOpenBacklogForWeek(wp.id) && (
+  <Button
+    size="sm"
+    variant="default"
+    onClick={(e) => {
+      e.stopPropagation();
+
+      applyBacklogToNextWeek(
+        project.id,
+        swp.id,
+        wp.id,
+        wp.weekNumber + 1
+      );
+    }}
+  >
+    Carry Forward to Week {wp.weekNumber + 1}
+  </Button>
+)}
 
   {/* General admin edit for any sub-week */}
   <Button
@@ -906,7 +1004,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
       openEditWeeklyDialog(swp.id, wp);
     }}
   >
-    <Pencil className="w-3 h-3" /> Edit
+    <Pencil className="w-3 h-3" /> {t('edit')}
   </Button>
 
   {/* General admin delete for any sub-week */}
@@ -921,7 +1019,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
       deleteWeeklyPlanByAdmin(project.id, swp.id, wp.id);
     }}
   >
-    <Trash2 className="w-3 h-3" /> Delete
+    <Trash2 className="w-3 h-3" /> {t('delete')}
   </Button>
 
   {!wp.assignedToEngineer && (
@@ -933,7 +1031,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
         assignToEngineer(project.id, swp.id, wp.id);
       }}
     >
-      <Send className="w-3 h-3" /> Assign
+      <Send className="w-3 h-3" /> {t('assign')}
     </Button>
   )}
 </div>
@@ -943,14 +1041,14 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                               <Table>
                                 <TableHeader>
                                   <TableRow className="bg-muted/30">
-                                    <TableHead className="text-xs">Day</TableHead>
-                                    <TableHead className="text-xs">Date</TableHead>
+                                    <TableHead className="text-xs">{t('day')}</TableHead>
+                                    <TableHead className="text-xs">{t('date')}</TableHead>
                                     <TableHead className="text-xs">Planned</TableHead>
                                     <TableHead className="text-xs">Actual</TableHead>
                                     <TableHead className="text-xs">Floor</TableHead>
-                                    <TableHead className="text-xs">Constraint</TableHead>
-                                    <TableHead className="text-xs">Status</TableHead>
-                                    <TableHead className="text-xs">Actions</TableHead>
+                                    <TableHead className="text-xs">{t('constraint')}</TableHead>
+                                    <TableHead className="text-xs">{t('status')}</TableHead>
+                                    <TableHead className="text-xs">{t('actions')}</TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -965,7 +1063,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
   <div>{dp.constraintLog || dp.constraint || '—'}</div>
   {(dp.constraintDate || dp.responsiblePerson) && (
     <div className="text-[11px] text-muted-foreground mt-1">
-      {dp.constraintDate && <div>Date: {dp.constraintDate}</div>}
+      {dp.constraintDate && <div>{t('date')}: {dp.constraintDate}</div>}
       {dp.responsiblePerson && <div>Person: {dp.responsiblePerson}</div>}
     </div>
   )}
@@ -1031,7 +1129,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                           <TableHead className="text-xs">Est. Qty</TableHead>
                           <TableHead className="text-xs">Rem. Qty</TableHead>
                           <TableHead className="text-xs">Floor</TableHead>
-                          <TableHead className="text-xs w-20">Actions</TableHead>
+                          <TableHead className="text-xs w-20">{t('actions')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1192,7 +1290,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
 
                       </div>
                       <div className="flex gap-2 justify-end">
-                        <Button size="sm" variant="outline" onClick={() => { setEditingId(null); setEditData(null); }}>Cancel</Button>
+                        <Button size="sm" variant="outline" onClick={() => { setEditingId(null); setEditData(null); }}>{t('cancel')}</Button>
                         <Button size="sm" onClick={() => {
                           const updated = swp.activities.map(a => a.id === editingId ? editData : a);
                           updateSixWeekPlanActivities(project.id, swp.id, updated);
@@ -1241,6 +1339,44 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                             </div>
 <div className="flex items-center gap-2">
   <StatusBadge status={wp.status} />
+  {canCloseWeek(wp) && (
+  <Button
+    size="sm"
+    variant="secondary"
+    onClick={(e) => {
+      e.stopPropagation();
+
+      const ok = window.confirm(
+        `Close Week ${wp.weekNumber} and generate backlog?`
+      );
+
+      if (!ok) return;
+
+      generateWeeklyBacklog(project.id, swp.id, wp.id);
+    }}
+  >
+    Close Week
+  </Button>
+)}
+
+{hasOpenBacklogForWeek(wp.id) && (
+  <Button
+    size="sm"
+    variant="default"
+    onClick={(e) => {
+      e.stopPropagation();
+
+      applyBacklogToNextWeek(
+        project.id,
+        swp.id,
+        wp.id,
+        wp.weekNumber + 1
+      );
+    }}
+  >
+    Carry Forward to Week {wp.weekNumber + 1}
+  </Button>
+)}
 
   {/* General admin edit for any sub-week */}
   <Button
@@ -1251,7 +1387,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
       openEditWeeklyDialog(swp.id, wp);
     }}
   >
-    <Pencil className="w-3 h-3" /> Edit
+    <Pencil className="w-3 h-3" /> {t('edit')}
   </Button>
 
   {/* General admin delete for any sub-week */}
@@ -1266,7 +1402,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
       deleteWeeklyPlanByAdmin(project.id, swp.id, wp.id);
     }}
   >
-    <Trash2 className="w-3 h-3" /> Delete
+    <Trash2 className="w-3 h-3" /> {t('delete')}
   </Button>
 
   {!wp.assignedToEngineer && (
@@ -1278,7 +1414,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
         assignToEngineer(project.id, swp.id, wp.id);
       }}
     >
-      <Send className="w-3 h-3" /> Assign
+      <Send className="w-3 h-3" /> {t('assign')}
     </Button>
   )}
 </div>
@@ -1288,14 +1424,14 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                               <Table>
                                 <TableHeader>
                                   <TableRow className="bg-muted/30">
-                                    <TableHead className="text-xs">Day</TableHead>
-                                    <TableHead className="text-xs">Date</TableHead>
+                                    <TableHead className="text-xs">{t('day')}</TableHead>
+                                    <TableHead className="text-xs">{t('date')}</TableHead>
                                     <TableHead className="text-xs">Planned</TableHead>
                                     <TableHead className="text-xs">Actual</TableHead>
                                     <TableHead className="text-xs">Floor</TableHead>
-                                    <TableHead className="text-xs">Constraint</TableHead>
-                                    <TableHead className="text-xs">Status</TableHead>
-                                    <TableHead className="text-xs">Actions</TableHead>
+                                    <TableHead className="text-xs">{t('constraint')}</TableHead>
+                                    <TableHead className="text-xs">{t('status')}</TableHead>
+                                    <TableHead className="text-xs">{t('actions')}</TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -1310,7 +1446,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
   <div>{dp.constraintLog || dp.constraint || '—'}</div>
   {(dp.constraintDate || dp.responsiblePerson) && (
     <div className="text-[11px] text-muted-foreground mt-1">
-      {dp.constraintDate && <div>Date: {dp.constraintDate}</div>}
+      {dp.constraintDate && <div>{t('date')}: {dp.constraintDate}</div>}
       {dp.responsiblePerson && <div>Person: {dp.responsiblePerson}</div>}
     </div>
   )}
@@ -1340,6 +1476,102 @@ console.log(newPlansOnly, sixWeekPlansOnly)
   )}
  </TabsContent>
  </Tabs>
+
+ <Card className="mt-6">
+  <CardHeader>
+    <CardTitle className="text-base flex items-center justify-between">
+      <span>Weekly Backlog</span>
+      <span className="text-xs text-muted-foreground font-normal">
+        Open: {getOpenBacklogsForProject().length}
+      </span>
+    </CardTitle>
+  </CardHeader>
+
+  <CardContent>
+    {getBacklogsForProject().length === 0 ? (
+      <p className="text-sm text-muted-foreground">
+        No weekly backlog generated yet.
+      </p>
+    ) : (
+      <div className="border rounded-lg overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/30">
+              <TableHead className="text-xs">Source Week</TableHead>
+              <TableHead className="text-xs">Target Week</TableHead>
+              <TableHead className="text-xs">Trade Activity</TableHead>
+              <TableHead className="text-xs">Floor</TableHead>
+              <TableHead className="text-xs">Unit</TableHead>
+              <TableHead className="text-xs">Planned</TableHead>
+              <TableHead className="text-xs">Actual</TableHead>
+              <TableHead className="text-xs">Shortfall</TableHead>
+              <TableHead className="text-xs">Status</TableHead>
+              <TableHead className="text-xs">Created</TableHead>
+            </TableRow>
+          </TableHeader>
+
+          <TableBody>
+            {getBacklogsForProject().map(b => (
+              <TableRow key={b.id}>
+                <TableCell className="text-xs">
+                  Week {b.sourceWeekNumber}
+                </TableCell>
+
+                <TableCell className="text-xs">
+                  {b.targetWeekNumber ? `Week ${b.targetWeekNumber}` : '—'}
+                </TableCell>
+
+                <TableCell className="text-xs">
+                  {b.tradeActivity}
+                </TableCell>
+
+                <TableCell className="text-xs">
+                  {b.floorUnit || '—'}
+                </TableCell>
+
+                <TableCell className="text-xs">
+                  {b.unit || '—'}
+                </TableCell>
+
+                <TableCell className="text-xs">
+                  {b.plannedQuantity}
+                </TableCell>
+
+                <TableCell className="text-xs">
+                  {b.completedQuantity}
+                </TableCell>
+
+                <TableCell className="text-xs font-semibold text-destructive">
+                  {b.shortfallQuantity}
+                </TableCell>
+
+                <TableCell className="text-xs">
+                  {b.status === 'open' && (
+                    <span className="text-amber-600 font-medium">Open</span>
+                  )}
+
+                  {b.status === 'carried_forward' && (
+                    <span className="text-green-600 font-medium">
+                      Carried Forward
+                    </span>
+                  )}
+
+                  {b.status === 'closed' && (
+                    <span className="text-muted-foreground">Closed</span>
+                  )}
+                </TableCell>
+
+                <TableCell className="text-xs">
+                  {b.createdAt ? new Date(b.createdAt).toLocaleDateString() : '—'}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    )}
+  </CardContent>
+</Card>
  
           {/* Admin Tickets Table */}
           {adminTickets.length > 0 && (
@@ -1357,11 +1589,11 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                         <TableHead className="text-xs">Contractor</TableHead>
                         <TableHead className="text-xs">Trade</TableHead>
                         <TableHead className="text-xs">Shortfall</TableHead>
-                        <TableHead className="text-xs">Constraint</TableHead>
+                        <TableHead className="text-xs">{t('constraint')}</TableHead>
                         <TableHead className="text-xs">ROV</TableHead>
                         <TableHead className="text-xs">Contractor Notes</TableHead>
                         <TableHead className="text-xs">Deadline</TableHead>
-                        <TableHead className="text-xs">Status</TableHead>
+                        <TableHead className="text-xs">{t('status')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1394,7 +1626,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
         <div className="flex justify-between items-center">
   <h2 className="font-semibold text-lg flex items-center gap-2">
     <CalendarDays className="w-5 h-5 text-primary" />
-    Assigned Weekly Plans
+    {t('engineerTaskView')}
   </h2>
 
   <Button size="sm" variant="outline" onClick={() => setShowTickets(true)}>
@@ -1422,7 +1654,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                       </div>
                     </CardTitle>
                   <p className="text-xs text-muted-foreground">
-  {wp.planName} · {getContractorName(wp.contractorId)} · Constraint: {wp.constraint || 'None'}
+  {wp.planName} · {getContractorName(wp.contractorId)} · {t('constraint')}: {wp.constraint || 'None'}
   {wp.constraintDate ? ` · Date: ${wp.constraintDate}` : ''}
   {wp.responsiblePerson ? ` · Person: ${wp.responsiblePerson}` : ''}
 </p>
@@ -1432,7 +1664,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-muted-foreground">{wp.dailyPlans.length} daily plan(s) · Total planned: {wp.dailyPlans.reduce((s, d) => s + d.plannedQuantity, 0)} / {wp.estimatedQuantity} {wp.unit}</p>
                         <Button size="sm" onClick={() => setShowCreateDaily({ swpId: wp.swpId, wpId: wp.id })}>
-                          <Plus className="w-3 h-3" /> Add Daily Plan
+                          <Plus className="w-3 h-3" /> Add {t('dailyPlan')}
                         </Button>
                       </div>
                       {wp.dailyPlans.length > 0 && (
@@ -1440,17 +1672,17 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                           <Table>
                             <TableHeader>
                               <TableRow className="bg-primary/5">
-                                <TableHead className="text-xs font-semibold">Day</TableHead>
-                                <TableHead className="text-xs font-semibold">Date</TableHead>
+                                <TableHead className="text-xs font-semibold">{t('day')}</TableHead>
+                                <TableHead className="text-xs font-semibold">{t('date')}</TableHead>
                                 <TableHead className="text-xs font-semibold">Planned Qty</TableHead>
                                 <TableHead className="text-xs font-semibold">Actual Qty</TableHead>
                                 <TableHead className="text-xs font-semibold">Remaining Qty</TableHead>
                                 <TableHead className="text-xs font-semibold">Floor</TableHead>
-                                <TableHead className="text-xs font-semibold">Constraint</TableHead>
+                                <TableHead className="text-xs font-semibold">{t('constraint')}</TableHead>
                                 <TableHead className="text-xs font-semibold">Eng Comments</TableHead>
                                 <TableHead className="text-xs font-semibold">ROV Comments</TableHead>
-                                <TableHead className="text-xs font-semibold">Status</TableHead>
-                                <TableHead className="text-xs font-semibold">Actions</TableHead>
+                                <TableHead className="text-xs font-semibold">{t('status')}</TableHead>
+                                <TableHead className="text-xs font-semibold">{t('actions')}</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -1474,7 +1706,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
       variant="outline"
       onClick={() => openEditDailyDialog(wp.swpId, wp.id, dp)}
     >
-      <Pencil className="w-3 h-3" /> Edit
+      <Pencil className="w-3 h-3" /> {t('edit')}
     </Button>
 
     <Button
@@ -1487,7 +1719,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
         deleteDailyPlanByEngineer(project.id, wp.swpId, wp.id, dp.id);
       }}
     >
-      <Trash2 className="w-3 h-3" /> Delete
+      <Trash2 className="w-3 h-3" /> {t('delete')}
     </Button>
 
     <Button
@@ -1531,7 +1763,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
       {/* =================== SUPERVISOR VIEW =================== */}
 {role === 'supervisor' && (
   <div className="space-y-4">
-    <h2 className="font-semibold text-lg">Supervisor Task View</h2>
+    <h2 className="font-semibold text-lg">{t('supervisorTaskView')}</h2>
 
     {supervisorPlans.length === 0 ? (
       <p className="text-muted-foreground text-sm">No daily tasks forwarded yet.</p>
@@ -1570,7 +1802,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                       </span>
 
                       <span className="text-sm font-medium">
-                        Week {wp.weekNumber} · {wp.tradeActivity}
+                        {t('week')} {wp.weekNumber} · {wp.tradeActivity}
                       </span>
 
                       <span className="text-xs text-muted-foreground">
@@ -1596,17 +1828,17 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                         <Table>
                           <TableHeader>
                             <TableRow className="bg-primary/5">
-                              <TableHead className="font-semibold">Day</TableHead>
-                              <TableHead className="font-semibold">Date</TableHead>
+                              <TableHead className="font-semibold">{t('day')}</TableHead>
+                              <TableHead className="font-semibold">{t('date')}</TableHead>
                               <TableHead className="font-semibold">Target</TableHead>
                               <TableHead className="font-semibold">Actual</TableHead>
                               <TableHead className="font-semibold">Remaining</TableHead>
                               <TableHead className="font-semibold">Floor</TableHead>
-                              <TableHead className="font-semibold">Constraint</TableHead>
-                              <TableHead className="font-semibold">Engineer Comments</TableHead>
-                              <TableHead className="font-semibold">ROV</TableHead>
-                              <TableHead className="font-semibold">Status</TableHead>
-                              <TableHead className="font-semibold">Actions</TableHead>
+                              <TableHead className="font-semibold">{t('constraint')}</TableHead>
+                              <TableHead className="font-semibold">{t('engineerComments')}</TableHead>
+                              <TableHead className="font-semibold">{t('rov')}</TableHead>
+                              <TableHead className="font-semibold">{t('status')}</TableHead>
+                              <TableHead className="font-semibold">{t('actions')}</TableHead>
                             </TableRow>
                           </TableHeader>
 
@@ -1674,7 +1906,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                                         )
                                       }
                                     >
-                                      Log Qty / ROV
+                                      {t('logQtyRov')}
                                     </Button>
                                   )}
 
@@ -1692,7 +1924,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                                           )
                                         }
                                       >
-                                        <Pencil className="w-3 h-3" /> Edit
+                                        <Pencil className="w-3 h-3" /> {t('edit')}
                                       </Button>
 
                                       <Button
@@ -1707,7 +1939,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                                           deleteSupervisorLog(project.id, swp.id, wp.id, dp.id);
                                         }}
                                       >
-                                        <Trash2 className="w-3 h-3" /> Delete
+                                        <Trash2 className="w-3 h-3" /> {t('delete')}
                                       </Button>
                                     </div>
                                   )}
@@ -1762,7 +1994,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                       </div>
                       <div className="grid grid-cols-3 gap-2 text-xs">
                        <div><span className="font-medium">ROV:</span> {ticket.rov || '—'} </div>
-                        <div><span className="font-medium">Constraint:</span> {ticket.constraint || '—'}</div>
+                        <div><span className="font-medium">{t('constraint')}:</span> {ticket.constraint || '—'}</div>
        </div>
 
                       {status !== 'closed' && (
@@ -1858,7 +2090,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                         <TableHead className="text-xs">Unit</TableHead>
                         <TableHead className="text-xs">Qty</TableHead>
                         <TableHead className="text-xs">Floor</TableHead>
-                        <TableHead className="text-xs w-20">Actions</TableHead>
+                        <TableHead className="text-xs w-20">{t('actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2053,8 +2285,8 @@ console.log(newPlansOnly, sixWeekPlansOnly)
               <span className="text-muted-foreground">Plan Name:</span>
               <span>{swp.name}</span>
 
-              <span className="text-muted-foreground">Week:</span>
-              <span>Week {wp.weekNumber}</span>
+              <span className="text-muted-foreground">{t('week')}:</span>
+              <span>{t('week')}{wp.weekNumber}</span>
 
               <span className="text-muted-foreground">Trade Activity:</span>
               <span>{wp.tradeActivity}</span>
@@ -2062,7 +2294,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
               <span className="text-muted-foreground">Contractor:</span>
               <span>{getContractorName(wp.contractorId)}</span>
 
-              <span className="text-muted-foreground">Day:</span>
+              <span className="text-muted-foreground">{t('day')}:</span>
               <span>{DAY_NAMES[dp.dayNumber - 1]}</span>
 
               <span className="text-muted-foreground">Date:</span>
@@ -2077,7 +2309,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
               <span className="text-muted-foreground">Floor Units:</span>
               <span>{Array.isArray(dp.floorUnits) ? dp.floorUnits.join(', ') : dp.floorUnits || '—'}</span>
 
-              <span className="text-muted-foreground">Constraint:</span>
+              <span className="text-muted-foreground">{t('constraint')}:</span>
               <span>{dp.constraint || '—'}</span>
 
               <span className="text-muted-foreground">Engineer Note:</span>
@@ -2122,7 +2354,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
               variant="outline"
               onClick={() => setShowSupervisorLogDialog(null)}
             >
-              Cancel
+              {t('cancel')}
             </Button>
             <Button onClick={handleSupervisorLogSubmit}>
   {supervisorDialogMode === 'edit' ? 'Update Progress' : 'Log Progress'}
@@ -2137,7 +2369,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
       <Dialog open={!!showEditWeekly} onOpenChange={() => setShowEditWeekly(null)}>
   <DialogContent className="sm:max-w-4xl">
     <DialogHeader>
-      <DialogTitle>Edit Sub-Week Plan</DialogTitle>
+      <DialogTitle>{t('edit')} {t('subWeekPlan')}</DialogTitle>
     </DialogHeader>
 
     <div className="space-y-3">
@@ -2170,7 +2402,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
         </div>
 
         <div>
-          <Label>Constraint</Label>
+          <Label>{t('constraint')}</Label>
           <Select value={editWpConstraint} onValueChange={setEditWpConstraint}>
             <SelectTrigger className="mt-1">
               <SelectValue placeholder="Select constraint" />
@@ -2256,10 +2488,10 @@ console.log(newPlansOnly, sixWeekPlansOnly)
 
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={() => setShowEditWeekly(null)}>
-          Cancel
+          {t('cancel')}
         </Button>
         <Button onClick={handleUpdateWeekly}>
-          Save Changes
+          {t('saveChanges')}
         </Button>
       </div>
     </div>
@@ -2269,13 +2501,13 @@ console.log(newPlansOnly, sixWeekPlansOnly)
       <Dialog open={!!showEditDaily} onOpenChange={() => setShowEditDaily(null)}>
   <DialogContent className="sm:max-w-4xl">
     <DialogHeader>
-      <DialogTitle>Edit Daily Plan</DialogTitle>
+      <DialogTitle>{t('edit')} {t('dailyPlan')}</DialogTitle>
     </DialogHeader>
 
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <Label>Day</Label>
+          <Label>{t('day')}</Label>
           <Select value={editDpDay} onValueChange={setEditDpDay}>
             <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -2287,7 +2519,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
         </div>
 
         <div>
-          <Label>Date</Label>
+          <Label>{t('date')}</Label>
           <Input type="date" value={editDpDate} onChange={e => setEditDpDate(e.target.value)} className="mt-1" />
         </div>
       </div>
@@ -2340,7 +2572,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
       </div>
 
       <div>
-        <Label>Constraint</Label>
+        <Label>{t('constraint')}</Label>
         <Select value={editDpConstraint} onValueChange={setEditDpConstraint}>
           <SelectTrigger className="mt-1"><SelectValue placeholder="Select constraint" /></SelectTrigger>
           <SelectContent>
@@ -2389,10 +2621,10 @@ console.log(newPlansOnly, sixWeekPlansOnly)
 
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={() => setShowEditDaily(null)}>
-          Cancel
+          {t('cancel')}
         </Button>
         <Button onClick={handleUpdateDaily}>
-          Save Changes
+          {t('saveChanges')}
         </Button>
       </div>
     </div>
@@ -2453,12 +2685,12 @@ console.log(newPlansOnly, sixWeekPlansOnly)
 
             {/* Step 2: Week-specific inputs */}
             <div>
-              <Label>Week Number</Label>
+              <Label>{t('week')} Number</Label>
               <Select value={wpWeek} onValueChange={setWpWeek}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                <SelectContent>
   {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(w => (
-    <SelectItem key={w} value={String(w)}>Week {w}</SelectItem>
+    <SelectItem key={w} value={String(w)}>{t('week')} {w}</SelectItem>
   ))}
 </SelectContent>
               </Select>
@@ -2568,7 +2800,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
             </div>
             <div className="grid grid-cols-2 gap-3">
   <div>
-    <Label>Constraint Date</Label>
+    <Label>{t('constraintDate')}</Label>
     <Input
       type="date"
       value={wpConstraintDate}
@@ -2578,7 +2810,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
   </div>
 
   <div>
-    <Label>Responsible Person</Label>
+    <Label>{t('responsiblePerson')}</Label>
     <Input
       value={wpResponsiblePerson}
       onChange={e => setWpResponsiblePerson(e.target.value)}
@@ -2602,12 +2834,12 @@ console.log(newPlansOnly, sixWeekPlansOnly)
       {/* Create Daily Plan (Engineer) — 6 days only */}
       <Dialog open={!!showCreateDaily} onOpenChange={() => setShowCreateDaily(null)}>
         <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
-          <DialogHeader><DialogTitle>Add Daily Plan (Mon-Sat)</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Add {t('dailyPlan')} (Mon-Sat)</DialogTitle></DialogHeader>
             <div className="overflow-y-auto pr-2 space-y-4">
           {selectedWp && (
             <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
               <p className="text-xs font-semibold text-muted-foreground">
-                Assigned Weekly Plans
+                {t('engineerTaskView')}
               </p>
 
               {selectedWp && (
@@ -2623,8 +2855,8 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                     <span className="text-muted-foreground">Activity ID:</span>
                     <span>{selectedWp.id}</span>
 
-                    <span className="text-muted-foreground">Week:</span>
-                    <span>Week {selectedWp.weekNumber}</span>
+                    <span className="text-muted-foreground">{t('week')}:</span>
+                    <span>{t('week')} {selectedWp.weekNumber}</span>
 
                     <span className="text-muted-foreground">Estimated Quantity:</span>
                     <span>{selectedWp.estimatedQuantity}</span>
@@ -2651,14 +2883,14 @@ console.log(newPlansOnly, sixWeekPlansOnly)
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Day</Label>
+                <Label>{t('day')}</Label>
                 <Select value={dpDay} onValueChange={setDpDay}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>{DAY_NAMES.map((d, i) => <SelectItem key={i} value={String(i + 1)}>{d}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Date</Label>
+                <Label>{t('date')}</Label>
                 <Input type="date" value={dpDate} onChange={e => setDpDate(e.target.value)} className="mt-1" />
               </div>
             </div>
@@ -2793,7 +3025,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
                 </DropdownMenu>
               </div>
               <div>
-                <Label>Constraint</Label>
+                <Label>{t('constraint')}</Label>
                 <Select value={dpConstraint} onValueChange={setDpConstraint}>
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Select constraint" /></SelectTrigger>
                   <SelectContent>{CONSTRAINTS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
@@ -2801,7 +3033,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
               </div>
               <div className="grid grid-cols-2 gap-3">
   <div>
-    <Label>Constraint Date</Label>
+    <Label>{t('constraint')} {t('date')}</Label>
     <Input
       type="date"
       value={dpConstraintDate}
@@ -2811,7 +3043,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
   </div>
 
   <div>
-    <Label>Responsible Person</Label>
+    <Label>{t('responsiblePerson')}</Label>
     <Input
       value={dpResponsiblePerson}
       onChange={e => setDpResponsiblePerson(e.target.value)}
@@ -2827,7 +3059,7 @@ console.log(newPlansOnly, sixWeekPlansOnly)
               <Input value={dpNote} onChange={e => setDpNote(e.target.value)} placeholder="Any remarks for this day" className="mt-1" />
             </div>
             <Button onClick={handleCreateDaily} disabled={!dpDate || !dpQty} className="w-full">
-              <Plus className="w-4 h-4" /> Add Daily Plan
+              <Plus className="w-4 h-4" /> Add {t('dailyPlan')}
             </Button>
           </div>
           </div>
