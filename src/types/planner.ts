@@ -50,17 +50,29 @@ export interface Project {
 //   weeklyPlans: WeeklyPlan[];
 // }
 
+export interface QuantityBreakdown {
+  id: string;
+  floorUnit: string;
+  unit: string;
+  quantity: number;
+  completedQuantity?: number;
+  remainingQuantity?: number;
+}
+
 export interface PlanActivity {
   id: string;
   category: string;
   contractorId: string;
   trade: string;
   tradeActivity: string;
-  units: string[];
-unit?: string; // temporary fallback for old data
-  estimatedQuantity: number;
-  floorUnits: string[];
-  remainingQuantity: number;
+quantityBreakdown: QuantityBreakdown[];
+
+  estimatedQuantity: number; // derived total
+  remainingQuantity: number; // derived total
+
+  floorUnits?: string[]; // legacy fallback
+  units?: string[];      // legacy fallback
+  unit?: string;         // legacy fallback
 
   completedQuantity?: number;       // NEW
   carryForwardQuantity?: number;    // NEW
@@ -91,7 +103,7 @@ export interface DailyPlan {
   units: string[];
 unit?: string; // temporary fallback for old data
   constraint: string;
-
+  quantityBreakdown: QuantityBreakdown[];
   // NEW
 constraintDate?: string;
 responsiblePerson?: string;
@@ -151,6 +163,8 @@ export interface BacklogItem {
   completedQuantity: number;
   shortfallQuantity: number;
 
+  quantityBreakdown?: QuantityBreakdown[];
+
   status: 'open' | 'carried_forward' | 'closed';
 
   createdAt: string;
@@ -164,18 +178,30 @@ export interface WeeklyPlan {
   category: string;
   contractorId: string;
   tradeActivity: string;
-  units: string[];
-unit?: string; // temporary fallback for old data;
-  estimatedQuantity: number;
-  floorUnits: string[];
-  constraint: string;
 
-constraintDate?: string;
-responsiblePerson?: string;
+  quantityBreakdown: QuantityBreakdown[];
+
+  units: string[];
+  unit?: string;
+
+  estimatedQuantity: number;
+  completedQuantity?: number;
+  remainingQuantity: number;
+
+  floorUnits: string[];
+
+  constraint: string;
+  constraintDate?: string;
+  responsiblePerson?: string;
+
   status: 'pending' | 'assigned' | 'forwarded' | 'logged' | 'submitted' | 'validated' | 'confirmed';
   assignedToEngineer: boolean;
-  remainingQuantity : number;
+
   dailyPlans: DailyPlan[];
+
+  isCarryForwardWeek?: boolean;
+  sourceActivityId?: string;
+  sourceWeekNumber?: number;
 }
 
 // Dummy data for dropdowns

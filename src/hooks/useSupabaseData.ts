@@ -1,12 +1,40 @@
 import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { Project, SixWeekPlan, PlanActivity, WeeklyPlan, DailyPlan, Contractor, Ticket } from '@/types/planner';
+import type {
+  Project,
+  SixWeekPlan,
+  PlanActivity,
+  WeeklyPlan,
+  DailyPlan,
+  Contractor,
+  Ticket,
+  BacklogItem
+} from '@/types/planner';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const toUuidOrNull = (val: string | undefined | null): string | null => {
   if (!val) return null;
   return UUID_REGEX.test(val) ? val : null;
 };
+
+const totalQty = (rows: any[] = []) =>
+  rows.reduce((sum, r) => sum + Number(r.quantity || 0), 0);
+
+const totalCompletedQty = (rows: any[] = []) =>
+  rows.reduce((sum, r) => sum + Number(r.completedQuantity || 0), 0);
+
+const totalRemainingQty = (rows: any[] = []) =>
+  rows.reduce((sum, r) => {
+    const planned = Number(r.quantity || 0);
+    const completed = Number(r.completedQuantity || 0);
+    return sum + Math.max(0, planned - completed);
+  }, 0);
+
+const getFloorsFromBreakdown = (rows: any[] = []) =>
+  Array.from(new Set(rows.map(r => r.floorUnit).filter(Boolean)));
+
+const getUnitsFromBreakdown = (rows: any[] = []) =>
+  Array.from(new Set(rows.map(r => r.unit).filter(Boolean)));
 
 // Helper to convert DB row to app type
 const toProject = (row: any): Project => ({
@@ -24,59 +52,105 @@ const toContractor = (row: any): Contractor => ({
   specialization: row.specialization || '',
 });
 
-const toActivity = (row: any): PlanActivity => ({
-  id: row.id,
-  category: row.category,
-  contractorId: row.contractor_id || '',
-  trade: row.trade,
-  tradeActivity: row.trade_activity,
-  units: row.units || (row.unit ? [row.unit] : []),
-  unit: row.unit || undefined,
-  estimatedQuantity: Number(row.estimated_quantity),
-  floorUnits: row.floor_units || [],
-  remainingQuantity: Number(row.remaining_quantity),
-});
+const toActivity = (row: any): PlanActivity => {
+  const quantityBreakdown = row.quantity_breakdown || [];
 
-const toWeeklyPlan = (row: any, dailyPlans: DailyPlan[]): WeeklyPlan => ({
-  id: row.id,
-  sixWeekPlanId: row.six_week_plan_id,
-  taskId: row.task_id || '',
-  weekNumber: row.week_number,
-  category: row.category,
-  contractorId: row.contractor_id || '',
-  tradeActivity: row.trade_activity,
-  units: row.units || (row.unit ? [row.unit] : []),
-  unit: row.unit || undefined,
-  estimatedQuantity: Number(row.estimated_quantity),
-  floorUnits: row.floor_units || [],
-  constraint: row.constraint_text,
-  status: row.status,
-  assignedToEngineer: row.assigned_to_engineer,
-  remainingQuantity: Number(row.remaining_quantity),
-  dailyPlans,
-});
+  return {
+    id: row.id,
+    category: row.category,
+    contractorId: row.contractor_id || '',
+    trade: row.trade,
+    tradeActivity: row.trade_activity,
 
-const toDailyPlan = (row: any): DailyPlan => ({
-  id: row.id,
-  weeklyPlanId: row.weekly_plan_id,
-  dayNumber: row.day_number,
-  date: row.date,
-  plannedQuantity: Number(row.planned_quantity),
-  units: row.units || (row.unit ? [row.unit] : []),
-  unit: row.unit || undefined,
-  constraint: row.constraint_text,
-  floorUnits: row.floor_units || [],
-  engineerNote: row.engineer_note,
-  rov: row.rov,
-  completedQuantity: row.completed_quantity != null ? Number(row.completed_quantity) : undefined,
-  remainingQuantity: row.remaining_quantity != null ? Number(row.remaining_quantity) : undefined,
-  isDone: row.is_done,
-  supervisorNote: row.supervisor_note,
-  constraintLog: row.constraint_log,
-  validatedByEngineer: row.validated_by_engineer,
-  confirmedByAdmin: row.confirmed_by_admin,
-  status: row.status,
-});
+    quantityBreakdown,
+
+    units: row.units || getUnitsFromBreakdown(quantityBreakdown) || (row.unit ? [row.unit] : []),
+    unit: row.unit || getUnitsFromBreakdown(quantityBreakdown)[0] || undefined,
+
+    estimatedQuantity: Number(row.estimated_quantity || totalQty(quantityBreakdown)),
+    floorUnits: row.floor_units || getFloorsFromBreakdown(quantityBreakdown),
+    remainingQuantity: Number(row.remaining_quantity || totalRemainingQty(quantityBreakdown)),
+
+    completedQuantity: row.completed_quantity != null ? Number(row.completed_quantity) : undefined,
+    carryForwardQuantity: row.carry_forward_quantity != null ? Number(row.carry_forward_quantity) : undefined,
+  };
+};
+
+const toWeeklyPlan = (row: any, dailyPlans: DailyPlan[]): WeeklyPlan => {
+  const quantityBreakdown = row.quantity_breakdown || [];
+
+  return {
+    id: row.id,
+    sixWeekPlanId: row.six_week_plan_id,
+    taskId: row.task_id || '',
+    weekNumber: row.week_number,
+    category: row.category,
+    contractorId: row.contractor_id || '',
+    tradeActivity: row.trade_activity,
+
+    quantityBreakdown,
+
+    units: row.units || getUnitsFromBreakdown(quantityBreakdown) || (row.unit ? [row.unit] : []),
+    unit: row.unit || getUnitsFromBreakdown(quantityBreakdown)[0] || undefined,
+
+    estimatedQuantity: Number(row.estimated_quantity || totalQty(quantityBreakdown)),
+    completedQuantity: row.completed_quantity != null ? Number(row.completed_quantity) : undefined,
+    floorUnits: row.floor_units || getFloorsFromBreakdown(quantityBreakdown),
+
+    constraint: row.constraint_text,
+    constraintDate: row.constraint_date || undefined,
+    responsiblePerson: row.responsible_person || undefined,
+
+    status: row.status,
+    assignedToEngineer: row.assigned_to_engineer,
+    remainingQuantity: Number(row.remaining_quantity || totalRemainingQty(quantityBreakdown)),
+    dailyPlans,
+
+    isCarryForwardWeek: !!row.is_carry_forward_week,
+    sourceActivityId: row.source_activity_id || undefined,
+    sourceWeekNumber: row.source_week_number != null ? Number(row.source_week_number) : undefined,
+  };
+};
+
+const toDailyPlan = (row: any): DailyPlan => {
+  const quantityBreakdown = row.quantity_breakdown || [];
+
+  return {
+    id: row.id,
+    weeklyPlanId: row.weekly_plan_id,
+    dayNumber: row.day_number,
+    date: row.date,
+
+    quantityBreakdown,
+
+    plannedQuantity: Number(row.planned_quantity || totalQty(quantityBreakdown)),
+    units: row.units || getUnitsFromBreakdown(quantityBreakdown) || (row.unit ? [row.unit] : []),
+    unit: row.unit || getUnitsFromBreakdown(quantityBreakdown)[0] || undefined,
+
+    constraint: row.constraint_text,
+    constraintDate: row.constraint_date || undefined,
+    responsiblePerson: row.responsible_person || undefined,
+
+    floorUnits: row.floor_units || getFloorsFromBreakdown(quantityBreakdown),
+    engineerNote: row.engineer_note,
+    rov: row.rov,
+
+    completedQuantity: row.completed_quantity != null
+      ? Number(row.completed_quantity)
+      : totalCompletedQty(quantityBreakdown) || undefined,
+
+    remainingQuantity: row.remaining_quantity != null
+      ? Number(row.remaining_quantity)
+      : totalRemainingQty(quantityBreakdown),
+
+    isDone: row.is_done,
+    supervisorNote: row.supervisor_note,
+    constraintLog: row.constraint_log,
+    validatedByEngineer: row.validated_by_engineer,
+    confirmedByAdmin: row.confirmed_by_admin,
+    status: row.status,
+  };
+};
 
 const toTicket = (row: any): Ticket => ({
   id: row.id,
@@ -199,7 +273,11 @@ export const useSupabaseData = () => {
 
 
 
- const upsertActivity = useCallback(async (activity: PlanActivity, sixWeekPlanId: string) => {
+const upsertActivity = useCallback(async (activity: PlanActivity, sixWeekPlanId: string) => {
+  const rows = activity.quantityBreakdown || [];
+  const floors = getFloorsFromBreakdown(rows);
+  const units = getUnitsFromBreakdown(rows);
+
   await supabase.from('plan_activities').upsert({
     id: activity.id,
     six_week_plan_id: sixWeekPlanId,
@@ -207,63 +285,94 @@ export const useSupabaseData = () => {
     contractor_id: toUuidOrNull(activity.contractorId),
     trade: activity.trade,
     trade_activity: activity.tradeActivity,
-    units: activity.units ?? [],
-unit: activity.units?.[0] ?? activity.unit ?? null,
-    estimated_quantity: activity.estimatedQuantity,
-    floor_units: activity.floorUnits,
-    remaining_quantity: activity.remainingQuantity,
+
+    quantity_breakdown: rows,
+
+    units: rows.length ? units : activity.units ?? [],
+    unit: rows.length ? units[0] ?? null : activity.units?.[0] ?? activity.unit ?? null,
+
+    estimated_quantity: rows.length ? totalQty(rows) : activity.estimatedQuantity,
+    floor_units: rows.length ? floors : activity.floorUnits,
+    remaining_quantity: rows.length ? totalRemainingQty(rows) : activity.remainingQuantity,
+
     completed_quantity: activity.completedQuantity ?? null,
+    carry_forward_quantity: activity.carryForwardQuantity ?? null,
   });
 }, []);
 
 const upsertWeeklyPlan = useCallback(async (wp: WeeklyPlan) => {
+  const rows = wp.quantityBreakdown || [];
+  const floors = getFloorsFromBreakdown(rows);
+  const units = getUnitsFromBreakdown(rows);
+
   await supabase.from('weekly_plans').upsert({
-  id: wp.id,
-  six_week_plan_id: wp.sixWeekPlanId,
-  task_id: toUuidOrNull(wp.taskId),
-  week_number: wp.weekNumber,
-  category: wp.category,
-  contractor_id: toUuidOrNull(wp.contractorId),
-  trade_activity: wp.tradeActivity,
-  units: wp.units ?? [],
-  unit: wp.units?.[0] ?? wp.unit ?? null,
-  estimated_quantity: wp.estimatedQuantity,
-  completed_quantity: wp.completedQuantity ?? null,
-  floor_units: wp.floorUnits,
-  constraint_text: wp.constraint,
-  status: wp.status,
-  assigned_to_engineer: wp.assignedToEngineer,
-  remaining_quantity: wp.remainingQuantity,
-  constraint_date: wp.constraintDate ?? null,
-  responsible_person: wp.responsiblePerson ?? null,
-});
+    id: wp.id,
+    six_week_plan_id: wp.sixWeekPlanId,
+    task_id: toUuidOrNull(wp.taskId),
+    week_number: wp.weekNumber,
+    category: wp.category,
+    contractor_id: toUuidOrNull(wp.contractorId),
+    trade_activity: wp.tradeActivity,
+
+    quantity_breakdown: rows,
+
+    units: rows.length ? units : wp.units ?? [],
+    unit: rows.length ? units[0] ?? null : wp.units?.[0] ?? wp.unit ?? null,
+
+    estimated_quantity: rows.length ? totalQty(rows) : wp.estimatedQuantity,
+    completed_quantity: wp.completedQuantity ?? null,
+    floor_units: rows.length ? floors : wp.floorUnits,
+
+    constraint_text: wp.constraint,
+    status: wp.status,
+    assigned_to_engineer: wp.assignedToEngineer,
+    remaining_quantity: rows.length ? totalRemainingQty(rows) : wp.remainingQuantity,
+
+    constraint_date: wp.constraintDate ?? null,
+    responsible_person: wp.responsiblePerson ?? null,
+
+    is_carry_forward_week: wp.isCarryForwardWeek ?? false,
+    source_activity_id: toUuidOrNull(wp.sourceActivityId),
+    source_week_number: wp.sourceWeekNumber ?? null,
+  });
 }, []);
 
-  const upsertDailyPlan = useCallback(async (dp: DailyPlan) => {
-    await supabase.from('daily_plans').upsert({
-      id: dp.id,
-      weekly_plan_id: dp.weeklyPlanId,
-      day_number: dp.dayNumber,
-      date: dp.date,
-      planned_quantity: dp.plannedQuantity,
-      units: dp.units ?? [],
-unit: dp.units?.[0] ?? dp.unit ?? null,
-      constraint_text: dp.constraint,
-      floor_units: dp.floorUnits,
-      engineer_note: dp.engineerNote,
-      rov: dp.rov,
-      completed_quantity: dp.completedQuantity,
-      remaining_quantity: dp.remainingQuantity,
-      is_done: dp.isDone,
-      supervisor_note: dp.supervisorNote,
-      constraint_log: dp.constraintLog,
-      validated_by_engineer: dp.validatedByEngineer,
-      confirmed_by_admin: dp.confirmedByAdmin,
-      status: dp.status,
-      constraint_date: dp.constraintDate ?? null,
-responsible_person: dp.responsiblePerson ?? null,
-    });
-  }, []);
+const upsertDailyPlan = useCallback(async (dp: DailyPlan) => {
+  const rows = dp.quantityBreakdown || [];
+  const floors = getFloorsFromBreakdown(rows);
+  const units = getUnitsFromBreakdown(rows);
+
+  await supabase.from('daily_plans').upsert({
+    id: dp.id,
+    weekly_plan_id: dp.weeklyPlanId,
+    day_number: dp.dayNumber,
+    date: dp.date,
+
+    quantity_breakdown: rows,
+
+    planned_quantity: rows.length ? totalQty(rows) : dp.plannedQuantity,
+    units: rows.length ? units : dp.units ?? [],
+    unit: rows.length ? units[0] ?? null : dp.units?.[0] ?? dp.unit ?? null,
+
+    constraint_text: dp.constraint,
+    floor_units: rows.length ? floors : dp.floorUnits,
+    engineer_note: dp.engineerNote,
+    rov: dp.rov,
+
+    completed_quantity: rows.length ? totalCompletedQty(rows) : dp.completedQuantity ?? null,
+    remaining_quantity: rows.length ? totalRemainingQty(rows) : dp.remainingQuantity ?? null,
+
+    is_done: dp.isDone,
+    supervisor_note: dp.supervisorNote,
+    constraint_log: dp.constraintLog,
+    validated_by_engineer: dp.validatedByEngineer,
+    confirmed_by_admin: dp.confirmedByAdmin,
+    status: dp.status,
+
+    constraint_date: dp.constraintDate ?? null,
+    responsible_person: dp.responsiblePerson ?? null,
+  });
+}, []);
 
   const upsertTicket = useCallback(async (ticket: Ticket) => {
     await supabase.from('tickets').upsert({
@@ -332,6 +441,7 @@ const fetchBacklogs = useCallback(async (): Promise<BacklogItem[]> => {
     plannedQuantity: Number(row.planned_quantity),
     completedQuantity: Number(row.completed_quantity),
     shortfallQuantity: Number(row.shortfall_quantity),
+    quantityBreakdown: row.quantity_breakdown || [],
     status: row.status,
     createdAt: row.created_at,
     carriedForwardAt: row.carried_forward_at || undefined,
@@ -356,6 +466,7 @@ const upsertBacklog = useCallback(async (b: BacklogItem) => {
     planned_quantity: b.plannedQuantity,
     completed_quantity: b.completedQuantity,
     shortfall_quantity: b.shortfallQuantity,
+    quantity_breakdown: b.quantityBreakdown || [],
     status: b.status,
     created_at: b.createdAt,
     carried_forward_at: b.carriedForwardAt || null,

@@ -15,7 +15,13 @@ import { cn } from '@/lib/utils';
 import { format, addDays, nextSunday } from 'date-fns';
 import { ArrowLeft, Plus, CalendarIcon, Send, Check, CalendarDays, ChevronDown, ChevronRight, BarChart3, Trash2, Pencil } from 'lucide-react';
 import { CATEGORIES, TRADE_ACTIVITIES, UNITS, FLOOR_UNITS, CONSTRAINTS } from '@/types/planner';
-import type { SixWeekPlan, WeeklyPlan, DailyPlan, PlanActivity } from '@/types/planner';
+import type {
+  SixWeekPlan,
+  WeeklyPlan,
+  DailyPlan,
+  PlanActivity,
+  QuantityBreakdown
+} from '@/types/planner';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,12 +35,228 @@ const emptyActivity = (): PlanActivity => ({
   contractorId: '',
   trade: '',
   tradeActivity: '',
+  quantityBreakdown: [],
   units: [],
   estimatedQuantity: 0,
-  floorUnits: [] as string[],
+  floorUnits: [],
   remainingQuantity: 0,
 });
+type QuantityBreakdownEditorProps = {
+  value: QuantityBreakdown[];
+  onChange: (rows: QuantityBreakdown[]) => void;
+  mode?: 'planned' | 'actual';
+  allowedRows?: QuantityBreakdown[];
+  allowedFloors?: string[];
+  allowedUnits?: string[];
+};
 
+
+const totalQty = (rows: QuantityBreakdown[] = []) =>
+  rows.reduce((sum, r) => sum + Number(r.quantity || 0), 0);
+
+const totalCompletedQty = (rows: QuantityBreakdown[] = []) =>
+  rows.reduce((sum, r) => sum + Number(r.completedQuantity || 0), 0);
+
+const totalRemainingQty = (rows: QuantityBreakdown[] = []) =>
+  rows.reduce((sum, r) => {
+    const planned = Number(r.quantity || 0);
+    const completed = Number(r.completedQuantity || 0);
+    return sum + Math.max(0, planned - completed);
+  }, 0);
+
+const getFloorsFromBreakdown = (rows: QuantityBreakdown[] = []) =>
+  Array.from(new Set(rows.map(r => r.floorUnit).filter(Boolean)));
+
+const getUnitsFromBreakdown = (rows: QuantityBreakdown[] = []) =>
+  Array.from(new Set(rows.map(r => r.unit).filter(Boolean)));
+
+const normalizeBreakdown = <T extends {
+  quantityBreakdown?: QuantityBreakdown[];
+  estimatedQuantity?: number;
+  plannedQuantity?: number;
+  remainingQuantity?: number;
+  completedQuantity?: number;
+  floorUnits?: string[];
+  units?: string[];
+  unit?: string;
+}>(item: T): T => {
+  const rows = item.quantityBreakdown || [];
+  if (!rows.length) return item;
+
+  const floors = getFloorsFromBreakdown(rows);
+  const units = getUnitsFromBreakdown(rows);
+
+  return {
+    ...item,
+    estimatedQuantity: 'estimatedQuantity' in item ? totalQty(rows) : item.estimatedQuantity,
+    plannedQuantity: 'plannedQuantity' in item ? totalQty(rows) : item.plannedQuantity,
+    completedQuantity: totalCompletedQty(rows) || item.completedQuantity,
+    remainingQuantity: totalRemainingQty(rows),
+    floorUnits: floors,
+    units,
+    unit: units[0] || item.unit,
+  };
+};
+
+
+const QuantityBreakdownEditor = ({
+  value,
+  onChange,
+  mode = 'planned',
+  allowedRows,
+  allowedFloors = FLOOR_UNITS,
+  allowedUnits = UNITS,
+}: QuantityBreakdownEditorProps) => {
+  const addRow = () => {
+    const base = allowedRows?.[0];
+
+    onChange([
+      ...value,
+      {
+        id: crypto.randomUUID(),
+        floorUnit: base?.floorUnit || '',
+        unit: base?.unit || '',
+        quantity: 0,
+        completedQuantity: mode === 'actual' ? 0 : undefined,
+      },
+    ]);
+  };
+
+  const updateRow = (id: string, patch: Partial<QuantityBreakdown>) => {
+    onChange(value.map(row => row.id === id ? { ...row, ...patch } : row));
+  };
+
+  const removeRow = (id: string) => {
+    onChange(value.filter(row => row.id !== id));
+  };
+
+  const rowOptions = allowedRows?.length
+    ? allowedRows
+    : [];
+
+  return (
+    <div className="space-y-2">
+      <div className="border rounded-lg overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/30">
+              <TableHead className="text-xs">Floor</TableHead>
+              <TableHead className="text-xs">Unit</TableHead>
+              <TableHead className="text-xs">Planned Qty</TableHead>
+              {mode === 'actual' && <TableHead className="text-xs">Actual Qty</TableHead>}
+              <TableHead className="text-xs w-20">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+
+          <TableBody>
+            {value.map(row => (
+              <TableRow key={row.id}>
+                <TableCell>
+                  {rowOptions.length ? (
+                    <Select
+                      value={`${row.floorUnit}|${row.unit}`}
+                      onValueChange={(v) => {
+                        const [floorUnit, unit] = v.split('|');
+                        updateRow(row.id, { floorUnit, unit });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select floor/unit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {rowOptions.map(r => (
+                          <SelectItem key={`${r.floorUnit}|${r.unit}`} value={`${r.floorUnit}|${r.unit}`}>
+                            {r.floorUnit} - {r.unit}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Select
+                      value={row.floorUnit}
+                      onValueChange={v => updateRow(row.id, { floorUnit: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Floor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {allowedFloors.map(f => (
+                          <SelectItem key={f} value={f}>{f}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </TableCell>
+
+                <TableCell>
+                  {rowOptions.length ? (
+                    <span className="text-sm">{row.unit || '—'}</span>
+                  ) : (
+                    <Select
+                      value={row.unit}
+                      onValueChange={v => updateRow(row.id, { unit: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Unit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {allowedUnits.map(u => (
+                          <SelectItem key={u} value={u}>{u}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </TableCell>
+
+                <TableCell>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={row.quantity || ''}
+                    onChange={e => updateRow(row.id, { quantity: Number(e.target.value) })}
+                  />
+                </TableCell>
+
+                {mode === 'actual' && (
+                  <TableCell>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={row.completedQuantity ?? ''}
+                      onChange={e => updateRow(row.id, { completedQuantity: Number(e.target.value) })}
+                    />
+                  </TableCell>
+                )}
+
+                <TableCell>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive"
+                    onClick={() => removeRow(row.id)}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="flex justify-between items-center">
+        <Button size="sm" variant="outline" onClick={addRow}>
+          <Plus className="w-3 h-3" /> Add Floor Qty
+        </Button>
+
+        <span className="text-xs text-muted-foreground">
+          Planned: {totalQty(value)}
+          {mode === 'actual' && ` · Actual: ${totalCompletedQty(value)} · Remaining: ${totalRemainingQty(value)}`}
+        </span>
+      </div>
+    </div>
+  );
+};
 
 const ProjectDetailPage = () => {
   const { t, i18n } = useTranslation();
@@ -126,18 +348,24 @@ const [showSupervisorLogDialog, setShowSupervisorLogDialog] = useState<{
 const [supervisorDialogMode, setSupervisorDialogMode] = useState<'create' | 'edit'>('create');
 const [supervisorLogQty, setSupervisorLogQty] = useState('');
 const [supervisorRovComment, setSupervisorRovComment] = useState('');
+const [wpBreakdown, setWpBreakdown] = useState<QuantityBreakdown[]>([]);
+const [dpBreakdown, setDpBreakdown] = useState<QuantityBreakdown[]>([]);
+const [editWpBreakdown, setEditWpBreakdown] = useState<QuantityBreakdown[]>([]);
+const [editDpBreakdown, setEditDpBreakdown] = useState<QuantityBreakdown[]>([]);
+const [supervisorBreakdown, setSupervisorBreakdown] = useState<QuantityBreakdown[]>([]);
 
 const openSupervisorLogDialog = (
   sixWeekPlanId: string,
   weeklyPlanId: string,
-  dp: DailyPlan
+  dp: DailyPlan,
+  mode: 'create' | 'edit' = 'create'
 ) => {
-  setShowSupervisorLogDialog({
-    sixWeekPlanId,
-    weeklyPlanId,
-    dailyPlanId: dp.id,
-  });
-
+  setShowSupervisorLogDialog({ sixWeekPlanId, weeklyPlanId, dailyPlanId: dp.id });
+  setSupervisorDialogMode(mode);
+  setSupervisorBreakdown((dp.quantityBreakdown || []).map(r => ({
+    ...r,
+    completedQuantity: r.completedQuantity ?? 0,
+  })));
   setSupervisorLogQty(dp.completedQuantity ? String(dp.completedQuantity) : '');
   setSupervisorRovComment(dp.rov || 'none');
 };
@@ -145,7 +373,9 @@ const handleSupervisorLogSubmit = () => {
   if (!showSupervisorLogDialog || !project) return;
 
   const { sixWeekPlanId, weeklyPlanId, dailyPlanId } = showSupervisorLogDialog;
-  const qty = Number(supervisorLogQty || 0);
+  const qty = supervisorBreakdown.length
+  ? totalCompletedQty(supervisorBreakdown)
+  : Number(supervisorLogQty || 0);
 
   if (qty <= 0) {
     alert('Done quantity must be greater than 0');
@@ -185,6 +415,7 @@ const openEditWeeklyDialog = (swpId: string, wp: WeeklyPlan) => {
   setEditWpFloor(Array.isArray(wp.floorUnits) ? wp.floorUnits : []);
   setEditWpUnits(wp.units || (wp.unit ? [wp.unit] : []));
   setEditWpContractorId(wp.contractorId || '');
+  setEditWpBreakdown(wp.quantityBreakdown || []);
 };
 
 const handleUpdateWeekly = () => {
@@ -194,7 +425,7 @@ const handleUpdateWeekly = () => {
   const wp = swp?.weeklyPlans.find(w => w.id === showEditWeekly.wpId);
   if (!swp || !wp) return;
 console.log("here", swp, wp)
-  const qty = Number(editWpQty || 0);
+ const qty = editWpBreakdown.length ? totalQty(editWpBreakdown) : Number(editWpQty || 0);
   if (qty <= 0) {
     alert('Quantity must be greater than 0');
     return;
@@ -202,12 +433,14 @@ console.log("here", swp, wp)
 
   updateWeeklyPlanByAdmin(project.id, swp.id, wp.id, {
     contractorId: editWpContractorId,
-    estimatedQuantity: qty,
-    remainingQuantity: qty,
+
     constraint: editWpConstraint,
-    floorUnits: editWpFloor,
-    units: editWpUnits,
-    unit: editWpUnits[0] || undefined,
+    quantityBreakdown: editWpBreakdown,
+estimatedQuantity: qty,
+remainingQuantity: totalRemainingQty(editWpBreakdown),
+floorUnits: getFloorsFromBreakdown(editWpBreakdown),
+units: getUnitsFromBreakdown(editWpBreakdown),
+unit: getUnitsFromBreakdown(editWpBreakdown)[0],
   });
 
   setShowEditWeekly(null);
@@ -227,6 +460,7 @@ const openEditDailyDialog = (swpId: string, wpId: string, dp: DailyPlan) => {
   setEditDpFloor(Array.isArray(dp.floorUnits) ? dp.floorUnits : []);
   setEditDpNote(dp.engineerNote || '');
   setEditDpUnits(dp.units || (dp.unit ? [dp.unit] : []));
+  setEditDpBreakdown(dp.quantityBreakdown || []);
 };
 
 const handleUpdateDaily = () => {
@@ -237,8 +471,8 @@ const handleUpdateDaily = () => {
   const dp = wp?.dailyPlans.find(d => d.id === showEditDaily.dpId);
   if (!swp || !wp || !dp) return;
 
-  const oldQty = Number(dp.plannedQuantity || 0);
-  const newQty = Number(editDpQty || 0);
+const oldQty = dp.quantityBreakdown?.length ? totalQty(dp.quantityBreakdown) : Number(dp.plannedQuantity || 0);
+const newQty = editDpBreakdown.length ? totalQty(editDpBreakdown) : Number(editDpQty || 0);
   if (newQty <= 0) {
     alert('Quantity must be greater than 0');
     return;
@@ -260,14 +494,13 @@ const handleUpdateDaily = () => {
     dayNumber: Number(editDpDay),
     plannedQuantity: newQty,
     constraint: editDpConstraint,
-    floorUnits: editDpFloor,
     engineerNote: editDpNote,
-    units: editDpUnits.length
-  ? editDpUnits
-  : (dp.units || (dp.unit ? [dp.unit] : [])),
-
-unit: editDpUnits[0] || undefined, // fallback
-    remainingQuantity: availableQty - newQty,
+    quantityBreakdown: editDpBreakdown,
+  completedQuantity: totalCompletedQty(supervisorBreakdown),
+  remainingQuantity: totalRemainingQty(supervisorBreakdown),
+floorUnits: getFloorsFromBreakdown(editDpBreakdown),
+units: getUnitsFromBreakdown(editDpBreakdown),
+unit: getUnitsFromBreakdown(editDpBreakdown)[0],
   });
 
   setShowEditDaily(null);
@@ -329,10 +562,15 @@ const adminTickets = tickets;
     
       const validActivities = planActivities
   .filter(a => a.category && a.contractorId && a.tradeActivity)
-  .map(a => ({
-    ...a,
-    remainingQuantity: a.estimatedQuantity
-  }));
+.map(a => {
+  const normalized = normalizeBreakdown(a);
+  return {
+    ...normalized,
+    remainingQuantity: normalized.quantityBreakdown?.length
+      ? totalQty(normalized.quantityBreakdown)
+      : normalized.estimatedQuantity
+  };
+});
       console.log(validActivities)
     if (validActivities.length === 0) return;
 const plan: SixWeekPlan = {
@@ -420,11 +658,12 @@ const handleCreateWeekly = (sixWeekPlanId: string) => {
   const activity = swp.activities.find(a => a.id === wpActivityId);
   if (!activity) return;
 
-  const qtyToAssign = Number(wpEstQty) || 0;
+const weeklyRows = wpBreakdown;
+const qtyToAssign = totalQty(weeklyRows);
 
 
   // Use persisted remainingQuantity, fallback to estimatedQuantity for old data
-  const currentRemaining = activity.remainingQuantity ?? activity.estimatedQuantity;
+  const currentRemaining = activity.remainingQuantity ?? totalQty(activity.quantityBreakdown || []);
 
 if (qtyToAssign <= 0) {
   alert('Quantity must be greater than 0');
@@ -438,25 +677,30 @@ if (qtyToAssign > currentRemaining) {
 
   const existingCount = swp.weeklyPlans.length;
 
-  const wp: WeeklyPlan = {
-    id: crypto.randomUUID(),
-    sixWeekPlanId,
-    weekNumber: Number(wpWeek),
-    taskId: wpActivityId,
-    category: activity.category,
-    contractorId: activity.contractorId,
-    tradeActivity: activity.tradeActivity,
-    units: wpUnits.length ? wpUnits : (activity.units || (activity.unit ? [activity.unit] : [])),
-    estimatedQuantity: qtyToAssign,
-    remainingQuantity: qtyToAssign,
-    floorUnits: wpFloor || activity.floorUnits,
-    constraint: wpConstraint,
-    status: 'pending',
-    assignedToEngineer: false,
-    dailyPlans: [],
-    constraintDate: wpConstraintDate || undefined,
-responsiblePerson: wpResponsiblePerson || undefined,
-  };
+const wp: WeeklyPlan = {
+  id: crypto.randomUUID(),
+  sixWeekPlanId,
+  weekNumber: Number(wpWeek),
+  taskId: wpActivityId,
+  category: activity.category,
+  contractorId: activity.contractorId,
+  tradeActivity: activity.tradeActivity,
+
+  quantityBreakdown: weeklyRows,
+
+  units: getUnitsFromBreakdown(weeklyRows),
+  unit: getUnitsFromBreakdown(weeklyRows)[0],
+  estimatedQuantity: totalQty(weeklyRows),
+  remainingQuantity: totalQty(weeklyRows),
+  floorUnits: getFloorsFromBreakdown(weeklyRows),
+
+  constraint: wpConstraint,
+  status: 'pending',
+  assignedToEngineer: false,
+  dailyPlans: [],
+  constraintDate: wpConstraintDate || undefined,
+  responsiblePerson: wpResponsiblePerson || undefined,
+};
 
   addWeeklyPlan(project.id, sixWeekPlanId, wp);
 
@@ -474,6 +718,7 @@ setWpConstraint('');
 setWpWeek('1');
 setWpConstraintDate('');
 setWpResponsiblePerson('');
+setWpBreakdown([]);
 };
   
 const handleCreateDaily = () => {
@@ -483,7 +728,8 @@ const handleCreateDaily = () => {
   const wp = swp?.weeklyPlans.find(w => w.id === showCreateDaily.wpId);
   if (!wp) return;
 
-  const qtyToAssign = Number(dpQty);
+const dailyRows = dpBreakdown;
+const qtyToAssign = totalQty(dailyRows);
 
   // ✅ First-time fallback: if remainingQuantity not yet set, use estimatedQuantity
   const currentRemaining = wp.remainingQuantity ?? wp.estimatedQuantity;
@@ -498,21 +744,26 @@ const handleCreateDaily = () => {
     return;
   }
 
-  const daily: DailyPlan = {
-    id: crypto.randomUUID(),
-    weeklyPlanId: showCreateDaily.wpId,
-    dayNumber: Number(dpDay),
-    date: dpDate,
-    plannedQuantity: qtyToAssign,
-    units: dpUnits.length ? dpUnits : (wp.units || (wp.unit ? [wp.unit] : [])),
-    constraint: dpConstraint,
-    floorUnits: dpFloor,
-    engineerNote: dpNote,
-    status: 'pending',
-    remainingQuantity: currentRemaining - qtyToAssign,
-    constraintDate: dpConstraintDate || undefined,
-responsiblePerson: dpResponsiblePerson || undefined,
-  };
+const daily: DailyPlan = {
+  id: crypto.randomUUID(),
+  weeklyPlanId: showCreateDaily.wpId,
+  dayNumber: Number(dpDay),
+  date: dpDate,
+
+  quantityBreakdown: dailyRows,
+
+  plannedQuantity: totalQty(dailyRows),
+  units: getUnitsFromBreakdown(dailyRows),
+  unit: getUnitsFromBreakdown(dailyRows)[0],
+  floorUnits: getFloorsFromBreakdown(dailyRows),
+
+  constraint: dpConstraint,
+  engineerNote: dpNote,
+  status: 'pending',
+  remainingQuantity: currentRemaining - qtyToAssign,
+  constraintDate: dpConstraintDate || undefined,
+  responsiblePerson: dpResponsiblePerson || undefined,
+};
 
   addDailyPlan(project.id, showCreateDaily.swpId, showCreateDaily.wpId, daily);
 
@@ -532,6 +783,7 @@ setDpUnits([]);
 setDpConstraintDate('');
 setDpResponsiblePerson('');
   setShowCreateDaily(null);
+  setDpBreakdown([]);
 };
 
   // Get the current six-week plan for the sub-week dialog
@@ -809,89 +1061,19 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                     />
                       </div>
                       <div className="grid grid-cols-3 gap-3">
-                        <div>
-                          <Label className="text-xs">Unit</Label>
-                         <DropdownMenu>
-  <DropdownMenuTrigger asChild>
-    <Button variant="outline" className="w-full mt-1 justify-between">
-      {editData.units?.length ? editData.units.join(", ") : "Select Units"}
-    </Button>
-  </DropdownMenuTrigger>
-
-  <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
-    {UNITS.map((u) => {
-      const selected = editData.units || [];
-      const checked = selected.includes(u);
-
-      return (
-        <div key={u} className="flex items-center gap-2 px-2 py-1">
-          <Checkbox
-            checked={checked}
-            onCheckedChange={(isChecked) => {
-              const updated = isChecked
-                ? [...selected, u]
-                : selected.filter(item => item !== u);
-
-              setEditData({
-                ...editData,
-                units: updated,
-              });
-            }}
-          />
-          <span className="text-sm">{u}</span>
-        </div>
-      );
-    })}
-  </DropdownMenuContent>
-</DropdownMenu>
-                        </div>
-                        <div>
-                          <Label className="text-xs">Est. Quantity</Label>
-                          <Input type='number'   step="any"  className="mt-1" value={editData.estimatedQuantity} onChange={e => setEditData({ ...editData, estimatedQuantity: Number(e.target.value) })} />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Floor Units</Label>
-
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="outline" className="w-full mt-1 justify-between">
-                                {editData.floorUnits?.length
-                                  ? editData.floorUnits.join(", ")
-                                  : "Select Floor Units"}
-                              </Button>
-                            </DropdownMenuTrigger>
-
-                            <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
-                              {FLOOR_UNITS.map((f) => {
-                                const selected = editData.floorUnits || [];
-                                const checked = selected.includes(f);
-
-                                return (
-                                  <div key={f} className="flex items-center gap-2 px-2 py-1">
-                                    <Checkbox
-                                      checked={checked}
-                                      onCheckedChange={(isChecked) => {
-                                        let updated;
-
-                                        if (isChecked) {
-                                          updated = [...selected, f];
-                                        } else {
-                                          updated = selected.filter((item) => item !== f);
-                                        }
-
-                                        setEditData({
-                                          ...editData,
-                                          floorUnits: updated,
-                                        });
-                                      }}
-                                    />
-                                    <span className="text-sm">{f}</span>
-                                  </div>
-                                );
-                              })}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
+                      <div>
+  <Label className="text-xs">Floor / Unit / Quantity Breakdown</Label>
+  <QuantityBreakdownEditor
+    value={editData.quantityBreakdown || []}
+    onChange={(rows) => {
+      const normalized = normalizeBreakdown({
+        ...editData,
+        quantityBreakdown: rows,
+      });
+      setEditData(normalized);
+    }}
+  />
+</div>
 
                       </div>
                       <div className="flex gap-2 justify-end">
@@ -2163,84 +2345,21 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <Label className="text-xs">Unit</Label>
-                      <DropdownMenu>
-  <DropdownMenuTrigger asChild>
-    <Button variant="outline" className="w-full mt-1 justify-between">
-      {planActivities[editingActivityIdx].units?.length
-        ? planActivities[editingActivityIdx].units.join(", ")
-        : "Select Units"}
-    </Button>
-  </DropdownMenuTrigger>
+  <Label className="text-xs">Floor / Unit / Quantity Breakdown</Label>
+  <QuantityBreakdownEditor
+    value={planActivities[editingActivityIdx].quantityBreakdown || []}
+    onChange={(rows) => {
+      const normalized = normalizeBreakdown({
+        ...planActivities[editingActivityIdx],
+        quantityBreakdown: rows,
+      });
 
-  <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
-    {UNITS.map((u) => {
-      const selectedUnits = planActivities[editingActivityIdx].units || [];
-      const checked = selectedUnits.includes(u);
-
-      return (
-        <div key={u} className="flex items-center gap-2 px-2 py-1">
-          <Checkbox
-            checked={checked}
-            onCheckedChange={(isChecked) => {
-              const updated = isChecked
-                ? [...selectedUnits, u]
-                : selectedUnits.filter(item => item !== u);
-
-              updateActivity(editingActivityIdx, 'units', updated as any);
-            }}
-          />
-          <span className="text-sm">{u}</span>
-        </div>
+      setPlanActivities(prev =>
+        prev.map((a, i) => i === editingActivityIdx ? normalized : a)
       );
-    })}
-  </DropdownMenuContent>
-</DropdownMenu>
-                    </div>
-                    <div>
-                      <Label className="text-xs">Est. Quantity</Label>
-                      <Input type="number"   step="any"  value={planActivities[editingActivityIdx].estimatedQuantity || ''} onChange={e => updateActivity(editingActivityIdx, 'estimatedQuantity', Number(e.target.value))} placeholder="500" className="mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Floor Units</Label>
-
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" className="w-full mt-1 justify-between">
-                            {planActivities[editingActivityIdx].floorUnits?.length
-                              ? planActivities[editingActivityIdx].floorUnits.join(", ")
-                              : "Select Floor Units"}
-                          </Button>
-                        </DropdownMenuTrigger>
-
-                        <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
-                          {FLOOR_UNITS.map((f) => {
-                            const selectedUnits = planActivities[editingActivityIdx].floorUnits || [];
-                            const checked = selectedUnits.includes(f);
-
-                            return (
-                              <div key={f} className="flex items-center gap-2 px-2 py-1">
-                                <Checkbox
-                                  checked={checked}
-                                  onCheckedChange={(isChecked) => {
-                                    let updated;
-
-                                    if (isChecked) {
-                                      updated = [...selectedUnits, f];
-                                    } else {
-                                      updated = selectedUnits.filter((item) => item !== f);
-                                    }
-
-                                    updateActivity(editingActivityIdx, "floorUnits", updated);
-                                  }}
-                                />
-                                <span className="text-sm">{f}</span>
-                              </div>
-                            );
-                          })}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
+    }}
+  />
+</div>
                   </div>
                   <Button size="sm" variant="secondary" onClick={() => setEditingActivityIdx(null)}>Done Editing</Button>
                 </div>
@@ -2318,17 +2437,14 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Done Quantity</Label>
-              <Input
-                type="number"
-                step="any"
-                value={supervisorLogQty}
-                onChange={e => setSupervisorLogQty(e.target.value)}
-                placeholder="Enter completed quantity"
-                className="mt-1"
-              />
-            </div>
+           <div>
+  <Label>Actual Quantity by Floor / Unit</Label>
+  <QuantityBreakdownEditor
+    value={supervisorBreakdown}
+    onChange={setSupervisorBreakdown}
+    mode="actual"
+  />
+</div>
 
             <div>
               <Label>Select ROV</Label>
@@ -2419,71 +2535,13 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label>Units</Label>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full mt-1 justify-between">
-                {editWpUnits?.length ? editWpUnits.join(", ") : "Select Units"}
-              </Button>
-            </DropdownMenuTrigger>
-
-            <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
-              {UNITS.map((u) => {
-                const checked = editWpUnits.includes(u);
-
-                return (
-                  <div key={u} className="flex items-center gap-2 px-2 py-1">
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={(isChecked) => {
-                        const updated = isChecked
-                          ? [...editWpUnits, u]
-                          : editWpUnits.filter(item => item !== u);
-
-                        setEditWpUnits(updated);
-                      }}
-                    />
-                    <span className="text-sm">{u}</span>
-                  </div>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <div>
-          <Label>Floor Units</Label>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full mt-1 justify-between">
-                {editWpFloor?.length ? editWpFloor.join(", ") : "Select Floor Units"}
-              </Button>
-            </DropdownMenuTrigger>
-
-            <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
-              {FLOOR_UNITS.map((f) => {
-                const checked = editWpFloor.includes(f);
-
-                return (
-                  <div key={f} className="flex items-center gap-2 px-2 py-1">
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={(isChecked) => {
-                        const updated = isChecked
-                          ? [...editWpFloor, f]
-                          : editWpFloor.filter(item => item !== f);
-
-                        setEditWpFloor(updated);
-                      }}
-                    />
-                    <span className="text-sm">{f}</span>
-                  </div>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+       <div>
+  <Label>Weekly Floor / Unit / Quantity</Label>
+  <QuantityBreakdownEditor
+    value={editWpBreakdown}
+    onChange={setEditWpBreakdown}
+  />
+</div>
       </div>
 
       <div className="flex justify-end gap-2">
@@ -2647,9 +2705,10 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                   const act = currentSwpForWeekly?.activities.find(a => a.id === val);
 
                   if (act) {
-                    setWpUnits(act.units || (act.unit ? [act.unit] : []));         // ✅ Prefill Unit
-                    setWpFloor(act.floorUnits);  // ✅ Prefill Floor Units
-                    setWpEstQty("");             // optional reset quantity
+                    setWpBreakdown([]);
+setWpEstQty('');
+setWpUnits(act.units || getUnitsFromBreakdown(act.quantityBreakdown || []));
+setWpFloor(act.floorUnits || getFloorsFromBreakdown(act.quantityBreakdown || []));
                   }
                 }}
               >
@@ -2696,100 +2755,17 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
               </Select>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div>
-                <Label>Units</Label>
-              <DropdownMenu>
-  <DropdownMenuTrigger asChild>
-    <Button variant="outline" className="w-full mt-1 justify-between">
-      {wpUnits?.length ? wpUnits.join(", ") : "Select Units"}
-    </Button>
-  </DropdownMenuTrigger>
-
-  <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
-    {(selectedActivity?.units || selectedActivity?.unit ? (selectedActivity?.units || [selectedActivity.unit]) : UNITS).map((u) => {
-      const checked = wpUnits.includes(u);
-
-      return (
-        <div key={u} className="flex items-center gap-2 px-2 py-1">
-          <Checkbox
-            checked={checked}
-            onCheckedChange={(isChecked) => {
-              const updated = isChecked
-                ? [...wpUnits, u]
-                : wpUnits.filter((item) => item !== u);
-
-              setWpUnits(updated);
-            }}
-          />
-          <span className="text-sm">{u}</span>
-        </div>
-      );
-    })}
-  </DropdownMenuContent>
-</DropdownMenu>
-              </div>
-              <div>
-                <Label>Est. Quantity</Label>
-             <Input
-  type="number"
-    step="any" 
-  value={wpEstQty}
-  onChange={e => {
-    const value = Number(e.target.value);
-    const limit = selectedActivity?.remainingQuantity ?? selectedActivity?.estimatedQuantity ?? 0;
-
-    if (value > limit) {
-      alert(`Max allowed quantity is ${limit}`);
-      return;
-    }
-
-    setWpEstQty(e.target.value);
-  }}
-  placeholder="100"
-  className="mt-1"
-  max={selectedActivity?.remainingQuantity ?? selectedActivity?.estimatedQuantity ?? undefined}
-  min={0}
-/>
-              </div>
-              <div>
-                <Label>Floor Units</Label>
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="w-full mt-1 justify-between">
-                      {wpFloor?.length
-                        ? wpFloor.join(", ")
-                        : "Select Floor Units"}
-                    </Button>
-                  </DropdownMenuTrigger>
-
-                  <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
-                    {(selectedActivity?.floorUnits || []).map((f) => {
-                      const checked = wpFloor?.includes(f);
-
-                      return (
-                        <div key={f} className="flex items-center gap-2 px-2 py-1">
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(isChecked) => {
-                              let updated;
-
-                              if (isChecked) {
-                                updated = [...(wpFloor || []), f];
-                              } else {
-                                updated = (wpFloor || []).filter((item) => item !== f);
-                              }
-
-                              setWpFloor(updated);
-                            }}
-                          />
-                          <span className="text-sm">{f}</span>
-                        </div>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+             <div>
+  <Label>Floor / Unit / Quantity for this Week</Label>
+  <QuantityBreakdownEditor
+    value={wpBreakdown}
+    onChange={setWpBreakdown}
+    allowedRows={selectedActivity?.quantityBreakdown || []}
+  />
+  <p className="text-xs text-muted-foreground mt-1">
+    Total week quantity: {totalQty(wpBreakdown)} / Available: {selectedActivity?.remainingQuantity ?? 0}
+  </p>
+</div>
             </div>
             <div>
               <Label>Constraint</Label>
@@ -2819,7 +2795,7 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
     />
   </div>
 </div>
-            <Button onClick={() => showCreateWeekly && handleCreateWeekly(showCreateWeekly)} disabled={!wpActivityId} className="w-full">
+            <Button onClick={() => showCreateWeekly && handleCreateWeekly(showCreateWeekly)} disabled={!wpActivityId || wpBreakdown.length === 0 || totalQty(wpBreakdown) <= 0} className="w-full">
               <Send className="w-4 h-4" /> Add & Assign to Engineer
             </Button>
           </div>
@@ -2895,135 +2871,18 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-             <div>
-  <Label>Planned Quantity (units/day)</Label>
-
-  <Input
-    type="number"
-      step="any" 
-    value={dpQty}
-    min={1}
-    max={maxAllowedQty}
-    onChange={(e) => {
-      const raw = e.target.value;
-      const value = Number(raw);
-
-      // Allow clearing the field
-      if (raw === '') {
-        setDpQty('');
-        return;
-      }
-
-      if (value <= 0) {
-        alert('Quantity must be greater than 0');
-        return;
-      }
-
-      if (value > maxAllowedQty) {
-        alert(`Max allowed quantity is ${maxAllowedQty}`);
-        return;
-      }
-
-      setDpQty(raw);
-    }}
-    placeholder="e.g. 50"
-    className="mt-1"
+           <div>
+  <Label>Daily Floor / Unit / Quantity</Label>
+  <QuantityBreakdownEditor
+    value={dpBreakdown}
+    onChange={setDpBreakdown}
+    allowedRows={selectedWp?.quantityBreakdown || []}
   />
 
-  {/* Inline error — cast dpQty to number for correct comparison */}
-  {Number(dpQty) > maxAllowedQty && (
-    <p className="text-red-500 text-xs mt-1">
-      Cannot exceed {maxAllowedQty}
-    </p>
-  )}
-
-  {/* Show remaining hint below input */}
-  {maxAllowedQty > 0 && (
-    <p className="text-muted-foreground text-xs mt-1">
-      Remaining: {maxAllowedQty - (Number(dpQty) || 0)} {selectedWp?.unit}
-    </p>
-  )}
-
-  {maxAllowedQty === 0 && (
-    <p className="text-destructive text-xs mt-1 font-medium">
-      No remaining quantity available for this week plan.
-    </p>
-  )}
+  <p className="text-xs text-muted-foreground mt-1">
+    Total daily quantity: {totalQty(dpBreakdown)} / Remaining: {maxAllowedQty}
+  </p>
 </div>
-
-              <div>
-                <Label className="text-xs">Unit</Label>
-
-               <DropdownMenu>
-  <DropdownMenuTrigger asChild>
-    <Button variant="outline" className="w-full mt-1 justify-between">
-      {dpUnits?.length ? dpUnits.join(", ") : "Select Units"}
-    </Button>
-  </DropdownMenuTrigger>
-
-  <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
-    {(selectedWp?.units || (selectedWp?.unit ? [selectedWp.unit] : UNITS)).map((u) => {
-      const checked = dpUnits.includes(u);
-
-      return (
-        <div key={u} className="flex items-center gap-2 px-2 py-1">
-          <Checkbox
-            checked={checked}
-            onCheckedChange={(isChecked) => {
-              const updated = isChecked
-                ? [...dpUnits, u]
-                : dpUnits.filter(item => item !== u);
-
-              setDpUnits(updated);
-            }}
-          />
-          <span className="text-sm">{u}</span>
-        </div>
-      );
-    })}
-  </DropdownMenuContent>
-</DropdownMenu>
-              </div>
-              <div>
-                <Label>Floor</Label>
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="w-full mt-1 justify-between">
-                      {dpFloor?.length
-                        ? dpFloor.join(", ")
-                        : "Select Floor"}
-                    </Button>
-                  </DropdownMenuTrigger>
-
-                  <DropdownMenuContent className="w-full max-h-60 overflow-y-auto">
-                    {allowedFloors.map((f) => {
-                      const selected = dpFloor || [];
-                      const checked = selected.includes(f);
-
-                      return (
-                        <div key={f} className="flex items-center gap-2 px-2 py-1">
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(isChecked) => {
-                              let updated;
-
-                              if (isChecked) {
-                                updated = [...selected, f];
-                              } else {
-                                updated = selected.filter((item) => item !== f);
-                              }
-
-                              setDpFloor(updated);
-                            }}
-                          />
-                          <span className="text-sm">{f}</span>
-                        </div>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
               <div>
                 <Label>{t('constraint')}</Label>
                 <Select value={dpConstraint} onValueChange={setDpConstraint}>
@@ -3058,7 +2917,7 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
               <Label>Engineer Note (optional)</Label>
               <Input value={dpNote} onChange={e => setDpNote(e.target.value)} placeholder="Any remarks for this day" className="mt-1" />
             </div>
-            <Button onClick={handleCreateDaily} disabled={!dpDate || !dpQty} className="w-full">
+            <Button onClick={handleCreateDaily} disabled={!dpDate || dpBreakdown.length === 0 || totalQty(dpBreakdown) <= 0} className="w-full">
               <Plus className="w-4 h-4" /> Add {t('dailyPlan')}
             </Button>
           </div>
