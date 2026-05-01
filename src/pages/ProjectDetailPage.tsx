@@ -98,6 +98,30 @@ const normalizeBreakdown = <T extends {
   };
 };
 
+const getUnitWiseTotals = (rows: QuantityBreakdown[] = []) => {
+  return rows.reduce((acc, row) => {
+    const unit = row.unit || '—';
+    acc[unit] = (acc[unit] || 0) + Number(row.quantity || 0);
+    return acc;
+  }, {} as Record<string, number>);
+};
+
+const UnitWiseTotalView = ({ rows }: { rows?: QuantityBreakdown[] }) => {
+  const totals = getUnitWiseTotals(rows || []);
+  const entries = Object.entries(totals);
+
+  if (!entries.length) return <span className="text-muted-foreground">—</span>;
+
+  return (
+    <div className="space-y-1 text-xs font-semibold">
+      {entries.map(([unit, qty]) => (
+        <div key={unit}>
+          {qty} {unit}
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const QuantityBreakdownEditor = ({
   value,
@@ -254,6 +278,64 @@ const QuantityBreakdownEditor = ({
           {mode === 'actual' && ` · Actual: ${totalCompletedQty(value)} · Remaining: ${totalRemainingQty(value)}`}
         </span>
       </div>
+    </div>
+  );
+};
+
+
+const QtyBreakdownView = ({ rows }: { rows?: QuantityBreakdown[] }) => {
+  if (!rows?.length) return <span className="text-muted-foreground">—</span>;
+
+  return (
+    <div className="min-w-[260px] space-y-1">
+      {rows.map(row => (
+        <div
+          key={row.id}
+          className="grid grid-cols-[1fr_70px_70px] gap-2 rounded border bg-muted/20 px-2 py-1 text-xs"
+        >
+          <span className="font-medium truncate" title={row.floorUnit}>
+            {row.floorUnit || '—'}
+          </span>
+
+          <span className="text-right">
+            {row.quantity || 0}
+          </span>
+
+          <span className="text-muted-foreground">
+            {row.unit || '—'}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const ActualBreakdownView = ({ rows }: { rows?: QuantityBreakdown[] }) => {
+  if (!rows?.length) return <span className="text-muted-foreground">—</span>;
+
+  return (
+    <div className="min-w-[320px] space-y-1">
+      {rows.map(row => {
+        const planned = Number(row.quantity || 0);
+        const actual = Number(row.completedQuantity || 0);
+        const remaining = Math.max(0, planned - actual);
+
+        return (
+          <div
+            key={row.id}
+            className="grid grid-cols-[1fr_60px_60px_70px_60px] gap-2 rounded border bg-muted/20 px-2 py-1 text-xs"
+          >
+            <span className="font-medium truncate" title={row.floorUnit}>
+              {row.floorUnit || '—'}
+            </span>
+
+            <span className="text-right">{planned}</span>
+            <span className="text-right text-green-700">{actual}</span>
+            <span className="text-right text-destructive">{remaining}</span>
+            <span className="text-muted-foreground">{row.unit || '—'}</span>
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -722,7 +804,8 @@ setWpBreakdown([]);
 };
   
 const handleCreateDaily = () => {
-  if (!showCreateDaily || !dpDate || !dpQty) return;
+  console.log(showCreateDaily,dpDate,dpQty)
+  if (!showCreateDaily || !dpDate ) return;
 
   const swp = project.sixWeekPlans.find(s => s.id === showCreateDaily.swpId);
   const wp = swp?.weeklyPlans.find(w => w.id === showCreateDaily.wpId);
@@ -982,10 +1065,9 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                           <TableHead className="text-xs">Contractor</TableHead>
                           <TableHead className="text-xs">Trade</TableHead>
                           <TableHead className="text-xs">Trade Activity</TableHead>
-                          <TableHead className="text-xs">Unit</TableHead>
-                          <TableHead className="text-xs">Est. Qty</TableHead>
-                          <TableHead className="text-xs">Rem. Qty</TableHead>
-                          <TableHead className="text-xs">Floor</TableHead>
+                          <TableHead className="text-xs min-w-[320px]">Floor / Qty / Unit</TableHead>
+<TableHead className="text-xs text-right">Total</TableHead>
+<TableHead className="text-xs text-right">Remaining</TableHead>
                           <TableHead className="text-xs w-20">{t('actions')}</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -997,12 +1079,16 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                             <TableCell className="text-xs">{getContractorName(act.contractorId)}</TableCell>
                             <TableCell className="text-xs">{act.trade}</TableCell>
                             <TableCell className="text-xs">{act.tradeActivity}</TableCell>
-                            <TableCell className="text-xs">
-  {(act.units && act.units.length ? act.units.join(', ') : act.unit) || '—'}
+                           <TableCell className="align-top">
+  <QtyBreakdownView rows={act.quantityBreakdown} />
 </TableCell>
-                            <TableCell className="text-xs">{act.estimatedQuantity}</TableCell>
-                            <TableCell className="text-xs">{act.remainingQuantity}</TableCell>
-                            <TableCell className="text-xs"> {act.floorUnits?.length ? act.floorUnits.join(", ") : "—"}</TableCell>
+<TableCell className="align-top">
+  <UnitWiseTotalView rows={act.quantityBreakdown} />
+</TableCell>
+
+<TableCell className="align-top">
+  <UnitWiseTotalView rows={act.quantityBreakdown} />
+</TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
                                 <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditingId(act.id); setEditData({ ...act }); }}>
@@ -1060,7 +1146,7 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                       onChange={(e) => setEditData({...editData, tradeActivity : e.target.value})}
                     />
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 gap-3">
                       <div>
   <Label className="text-xs">Floor / Unit / Quantity Breakdown</Label>
   <QuantityBreakdownEditor
@@ -1129,7 +1215,7 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
 
   return (
     <span className="text-xs text-muted-foreground">
-      {wp.estimatedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'} ·
+     <UnitWiseTotalView rows={wp.quantityBreakdown} /> {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'} ·
       {' '}Activities Assigned: {assignedActivitiesInThisSubWeek}/{totalActivitiesCreatedInThisSubWeek} ·
       {' '}Floor: {Array.isArray(wp.floorUnits) ? wp.floorUnits.join(', ') : wp.floorUnits}
     </span>
@@ -1225,9 +1311,7 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                                   <TableRow className="bg-muted/30">
                                     <TableHead className="text-xs">{t('day')}</TableHead>
                                     <TableHead className="text-xs">{t('date')}</TableHead>
-                                    <TableHead className="text-xs">Planned</TableHead>
-                                    <TableHead className="text-xs">Actual</TableHead>
-                                    <TableHead className="text-xs">Floor</TableHead>
+                                    <TableHead className="text-xs min-w-[340px]">Floor / Planned / Actual / Remaining / Unit</TableHead>
                                     <TableHead className="text-xs">{t('constraint')}</TableHead>
                                     <TableHead className="text-xs">{t('status')}</TableHead>
                                     <TableHead className="text-xs">{t('actions')}</TableHead>
@@ -1238,9 +1322,9 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                                     <TableRow key={dp.id}>
                                       <TableCell className="text-xs">{DAY_NAMES[dp.dayNumber - 1]}</TableCell>
                                       <TableCell className="text-xs">{dp.date}</TableCell>
-                                      <TableCell className="text-xs">{dp.plannedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'}</TableCell>
-                                      <TableCell className="text-xs font-medium">{dp.completedQuantity !== undefined ? `${dp.completedQuantity} ${(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'}` : '—'}</TableCell>
-                                      <TableCell className="text-xs">{dp.floorUnits}</TableCell>
+                                     <TableCell className="align-top">
+  <ActualBreakdownView rows={dp.quantityBreakdown} />
+</TableCell>
                                      <TableCell className="text-xs">
   <div>{dp.constraintLog || dp.constraint || '—'}</div>
   {(dp.constraintDate || dp.responsiblePerson) && (
@@ -1307,10 +1391,9 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                           <TableHead className="text-xs">Contractor</TableHead>
                           <TableHead className="text-xs">Trade</TableHead>
                           <TableHead className="text-xs">Trade Activity</TableHead>
-                          <TableHead className="text-xs">Unit</TableHead>
-                          <TableHead className="text-xs">Est. Qty</TableHead>
-                          <TableHead className="text-xs">Rem. Qty</TableHead>
-                          <TableHead className="text-xs">Floor</TableHead>
+                         <TableHead className="text-xs min-w-[320px]">Floor / Qty / Unit</TableHead>
+<TableHead className="text-xs text-right">Total</TableHead>
+<TableHead className="text-xs text-right">Remaining</TableHead>
                           <TableHead className="text-xs w-20">{t('actions')}</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1322,12 +1405,15 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                             <TableCell className="text-xs">{getContractorName(act.contractorId)}</TableCell>
                             <TableCell className="text-xs">{act.trade}</TableCell>
                             <TableCell className="text-xs">{act.tradeActivity}</TableCell>
-                            <TableCell className="text-xs">
-  {(act.units && act.units.length ? act.units.join(', ') : act.unit) || '—'}
+                           <TableCell className="align-top">
+  <QtyBreakdownView rows={act.quantityBreakdown} />
 </TableCell>
-                            <TableCell className="text-xs">{act.estimatedQuantity}</TableCell>
-                            <TableCell className="text-xs">{act.remainingQuantity}</TableCell>
-                            <TableCell className="text-xs"> {act.floorUnits?.length ? act.floorUnits.join(", ") : "—"}</TableCell>
+<TableCell className="text-xs text-right font-semibold">
+  {act.estimatedQuantity}
+</TableCell>
+<TableCell className="text-xs text-right font-semibold">
+  {act.remainingQuantity}
+</TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
                                 <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditingId(act.id); setEditData({ ...act }); }}>
@@ -1517,7 +1603,7 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                             <span className="text-sm font-medium flex items-center gap-2">
   W{wp.weekNumber} · {wp.tradeActivity}
 </span>
-                              <span className="text-xs text-muted-foreground">{wp.estimatedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'} · {wp.floorUnits}</span>
+                              <span className="text-xs text-muted-foreground"><UnitWiseTotalView rows={wp.quantityBreakdown} />{(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'} · {wp.floorUnits}</span>
                             </div>
 <div className="flex items-center gap-2">
   <StatusBadge status={wp.status} />
@@ -1831,7 +1917,7 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                         W{wp.weekNumber} · {wp.tradeActivity} · {wp.floorUnits}
                       </span>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">{wp.estimatedQuantity} {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'}</span>
+                        <span className="text-xs text-muted-foreground"><UnitWiseTotalView rows={wp.quantityBreakdown} />{(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'}</span>
                         <StatusBadge status={wp.status} />
                       </div>
                     </CardTitle>
@@ -1987,10 +2073,9 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                         {t('week')} {wp.weekNumber} · {wp.tradeActivity}
                       </span>
 
-                      <span className="text-xs text-muted-foreground">
-                        {wp.estimatedQuantity}{' '}
-                        {(wp.units && wp.units.length ? wp.units.join(', ') : wp.unit) || '—'}
-                      </span>
+                      <div className="text-xs text-muted-foreground">
+                        <UnitWiseTotalView rows={wp.quantityBreakdown} />
+                      </div>
                     </div>
 
                     <div className="text-xs text-muted-foreground">
@@ -2007,52 +2092,52 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                       </div>
 
                       <div className="bg-card rounded-lg border overflow-x-auto">
-                        <Table>
+                        <Table className="min-w-[1100px]">
                           <TableHeader>
                             <TableRow className="bg-primary/5">
-                              <TableHead className="font-semibold">{t('day')}</TableHead>
-                              <TableHead className="font-semibold">{t('date')}</TableHead>
-                              <TableHead className="font-semibold">Target</TableHead>
-                              <TableHead className="font-semibold">Actual</TableHead>
-                              <TableHead className="font-semibold">Remaining</TableHead>
-                              <TableHead className="font-semibold">Floor</TableHead>
-                              <TableHead className="font-semibold">{t('constraint')}</TableHead>
-                              <TableHead className="font-semibold">{t('engineerComments')}</TableHead>
-                              <TableHead className="font-semibold">{t('rov')}</TableHead>
-                              <TableHead className="font-semibold">{t('status')}</TableHead>
-                              <TableHead className="font-semibold">{t('actions')}</TableHead>
+                              <TableHead className="font-semibold w-[100px]">
+                                {t('day')}
+                              </TableHead>
+                              <TableHead className="font-semibold w-[120px]">
+                                {t('date')}
+                              </TableHead>
+                              <TableHead className="font-semibold min-w-[440px]">
+                                Floor / Planned / Actual / Remaining / Unit
+                              </TableHead>
+                              <TableHead className="font-semibold min-w-[180px]">
+                                {t('constraint')}
+                              </TableHead>
+                              <TableHead className="font-semibold min-w-[160px]">
+                                {t('engineerComments')}
+                              </TableHead>
+                              <TableHead className="font-semibold min-w-[120px]">
+                                {t('rov')}
+                              </TableHead>
+                              <TableHead className="font-semibold w-[120px]">
+                                {t('status')}
+                              </TableHead>
+                              <TableHead className="font-semibold w-[220px]">
+                                {t('actions')}
+                              </TableHead>
                             </TableRow>
                           </TableHeader>
 
                           <TableBody>
                             {wp.dailyPlans.map(dp => (
                               <TableRow key={dp.id}>
-                                <TableCell className="text-xs">
+                                <TableCell className="text-xs align-top">
                                   {DAY_NAMES[dp.dayNumber - 1]}
                                 </TableCell>
 
-                                <TableCell className="text-xs">{dp.date}</TableCell>
-
-                                <TableCell className="text-xs">
-                                  {dp.plannedQuantity}{' '}
-                                  {(dp.units?.length ? dp.units.join(', ') : wp.unit) || '—'}
+                                <TableCell className="text-xs align-top">
+                                  {dp.date}
                                 </TableCell>
 
-                                <TableCell className="text-xs">
-                                  {dp.completedQuantity !== undefined
-                                    ? `${dp.completedQuantity} ${(dp.units?.length ? dp.units.join(', ') : wp.unit) || '—'}`
-                                    : '—'}
+                                <TableCell className="align-top">
+                                  <ActualBreakdownView rows={dp.quantityBreakdown} />
                                 </TableCell>
 
-                                <TableCell className="text-xs">
-                                  {dp.remainingQuantity ?? '—'}
-                                </TableCell>
-
-                                <TableCell className="text-xs">
-                                  {Array.isArray(dp.floorUnits) ? dp.floorUnits.join(', ') : dp.floorUnits || '—'}
-                                </TableCell>
-
-                                <TableCell className="text-xs">
+                                <TableCell className="text-xs align-top">
                                   <div>{dp.constraint || '—'}</div>
                                   {(dp.constraintDate || dp.responsiblePerson) && (
                                     <div className="text-[11px] text-muted-foreground mt-1">
@@ -2062,19 +2147,19 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                                   )}
                                 </TableCell>
 
-                                <TableCell className="text-xs">
+                                <TableCell className="text-xs align-top">
                                   {dp.engineerNote || '—'}
                                 </TableCell>
 
-                                <TableCell className="text-xs">
+                                <TableCell className="text-xs align-top">
                                   {dp.rov || 'None'}
                                 </TableCell>
 
-                                <TableCell>
+                                <TableCell className="align-top">
                                   <StatusBadge status={dp.status} />
                                 </TableCell>
 
-                                <TableCell>
+                                <TableCell className="align-top">
                                   {dp.status === 'forwarded' && (
                                     <Button
                                       size="sm"
@@ -2269,9 +2354,7 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                         <TableHead className="text-xs">Contractor</TableHead>
                         <TableHead className="text-xs">Trade</TableHead>
                         <TableHead className="text-xs">Trade Activity</TableHead>
-                        <TableHead className="text-xs">Unit</TableHead>
-                        <TableHead className="text-xs">Qty</TableHead>
-                        <TableHead className="text-xs">Floor</TableHead>
+                       <TableHead className="text-xs min-w-[300px]">Floor / Qty / Unit</TableHead>
                         <TableHead className="text-xs w-20">{t('actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -2283,11 +2366,9 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                           <TableCell className="text-xs">{act.contractorId ? getContractorName(act.contractorId) : '—'}</TableCell>
                           <TableCell className="text-xs">{act.trade || '—'}</TableCell>
                           <TableCell className="text-xs">{act.tradeActivity || '—'}</TableCell>
-                          <TableCell className="text-xs">{act.unit || '—'}</TableCell>
-                          <TableCell className="text-xs">{act.estimatedQuantity || '—'}</TableCell>
-                          <TableCell className="text-xs">
-                            {act.floorUnits?.length ? act.floorUnits.join(", ") : "—"}
-                          </TableCell>
+                          <TableCell className="align-top">
+  <QtyBreakdownView rows={act.quantityBreakdown} />
+</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
                               <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditingActivityIdx(editingActivityIdx === idx ? null : idx)}>
@@ -2690,117 +2771,189 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
 </Dialog>
 
       {/* Create Sub-Week Plan — Activity-driven */}
-      <Dialog open={!!showCreateWeekly} onOpenChange={() => setShowCreateWeekly(null)}>
-        <DialogContent className="sm:max-w-4xl">
-          <DialogHeader><DialogTitle>Create Sub-Week Plan</DialogTitle></DialogHeader>
-          <div className="space-y-3 max-h-[70vh] overflow-y-auto">
-            {/* Step 1: Select Activity */}
+     <Dialog open={!!showCreateWeekly} onOpenChange={() => setShowCreateWeekly(null)}>
+  <DialogContent className="sm:max-w-5xl">
+    <DialogHeader>
+      <DialogTitle>Create Sub-Week Plan</DialogTitle>
+    </DialogHeader>
+
+    <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-2">
+      <div>
+        <Label>Select Activity</Label>
+        <Select
+          value={wpActivityId}
+          onValueChange={(val) => {
+            setWpActivityId(val);
+
+            const act = currentSwpForWeekly?.activities.find(a => a.id === val);
+
+            if (act) {
+              setWpBreakdown([]);
+              setWpEstQty('');
+              setWpUnits(act.units || getUnitsFromBreakdown(act.quantityBreakdown || []));
+              setWpFloor(act.floorUnits || getFloorsFromBreakdown(act.quantityBreakdown || []));
+            }
+          }}
+        >
+          <SelectTrigger className="mt-1">
+            <SelectValue placeholder="Choose an activity" />
+          </SelectTrigger>
+          <SelectContent>
+            {currentSwpForWeekly?.activities.map(act => (
+              <SelectItem key={act.id} value={act.id}>
+                {act.trade} — {act.tradeActivity} ({getContractorName(act.contractorId)})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {selectedActivity && (
+        <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground">
+            Activity Details
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
             <div>
-              <Label>Select Activity</Label>
-              <Select
-                value={wpActivityId}
-                onValueChange={(val) => {
-                  setWpActivityId(val);
-
-                  const act = currentSwpForWeekly?.activities.find(a => a.id === val);
-
-                  if (act) {
-                    setWpBreakdown([]);
-setWpEstQty('');
-setWpUnits(act.units || getUnitsFromBreakdown(act.quantityBreakdown || []));
-setWpFloor(act.floorUnits || getFloorsFromBreakdown(act.quantityBreakdown || []));
-                  }
-                }}
-              >
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Choose an activity" /></SelectTrigger>
-                <SelectContent>
-                  {currentSwpForWeekly?.activities.map(act => (
-                    <SelectItem key={act.id} value={act.id}>
-                      {act.trade} — {act.tradeActivity} ({getContractorName(act.contractorId)})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <span className="text-muted-foreground block">Activity ID</span>
+              <span className="font-mono break-all">{selectedActivity.id}</span>
             </div>
 
-            {/* Show selected activity info */}
-            {selectedActivity && (
-              <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
-                <p className="text-xs font-semibold text-muted-foreground">Activity Details</p>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                  <span className="text-muted-foreground">Activity ID:</span><span>{selectedActivity.id}</span>
-                  <span className="text-muted-foreground">Category:</span><span>{selectedActivity.category}</span>
-                  <span className="text-muted-foreground">Contractor:</span><span>{getContractorName(selectedActivity.contractorId)}</span>
-                  <span className="text-muted-foreground">Trade:</span><span>{selectedActivity.trade}</span>
-                  <span className="text-muted-foreground">Trade Activity:</span><span>{selectedActivity.tradeActivity}</span>
-                  <span className="text-muted-foreground">Estimated Quantity:</span><span>{selectedActivity.estimatedQuantity}</span>
-                  <span className="text-muted-foreground">Remaining Quantity:</span><span>{selectedActivity.remainingQuantity}</span>
-                  <span className="text-muted-foreground">Units:</span><span>{selectedActivity.unit}</span>
-                  <span className="text-muted-foreground">Floor Unit:</span><span>{selectedActivity.floorUnits?.length ? selectedActivity.floorUnits.join(", ") : "—"}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Step 2: Week-specific inputs */}
             <div>
-              <Label>{t('week')} Number</Label>
-              <Select value={wpWeek} onValueChange={setWpWeek}>
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-               <SelectContent>
-  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(w => (
-    <SelectItem key={w} value={String(w)}>{t('week')} {w}</SelectItem>
-  ))}
-</SelectContent>
-              </Select>
+              <span className="text-muted-foreground block">Category</span>
+              <span className="font-medium">{selectedActivity.category}</span>
             </div>
-            <div className="grid grid-cols-3 gap-3">
-             <div>
-  <Label>Floor / Unit / Quantity for this Week</Label>
-  <QuantityBreakdownEditor
-    value={wpBreakdown}
-    onChange={setWpBreakdown}
-    allowedRows={selectedActivity?.quantityBreakdown || []}
-  />
-  <p className="text-xs text-muted-foreground mt-1">
-    Total week quantity: {totalQty(wpBreakdown)} / Available: {selectedActivity?.remainingQuantity ?? 0}
-  </p>
-</div>
-            </div>
-            <div>
-              <Label>Constraint</Label>
-              <Select value={wpConstraint} onValueChange={setWpConstraint}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Select constraint" /></SelectTrigger>
-                <SelectContent>{CONSTRAINTS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-  <div>
-    <Label>{t('constraintDate')}</Label>
-    <Input
-      type="date"
-      value={wpConstraintDate}
-      onChange={e => setWpConstraintDate(e.target.value)}
-      className="mt-1"
-    />
-  </div>
 
-  <div>
-    <Label>{t('responsiblePerson')}</Label>
-    <Input
-      value={wpResponsiblePerson}
-      onChange={e => setWpResponsiblePerson(e.target.value)}
-      placeholder="Enter name"
-      className="mt-1"
-    />
-  </div>
-</div>
-            <Button onClick={() => showCreateWeekly && handleCreateWeekly(showCreateWeekly)} disabled={!wpActivityId || wpBreakdown.length === 0 || totalQty(wpBreakdown) <= 0} className="w-full">
-              <Send className="w-4 h-4" /> Add & Assign to Engineer
-            </Button>
+            <div>
+              <span className="text-muted-foreground block">Contractor</span>
+              <span className="font-medium">
+                {getContractorName(selectedActivity.contractorId)}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-muted-foreground block">Trade</span>
+              <span className="font-medium">{selectedActivity.trade}</span>
+            </div>
+
+            <div>
+              <span className="text-muted-foreground block">Trade Activity</span>
+              <span className="font-medium">{selectedActivity.tradeActivity}</span>
+            </div>
           </div>
-        </DialogContent>
-      </Dialog>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="rounded-md border bg-background p-3">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">
+                Activity Quantity Breakdown
+              </p>
+              <QtyBreakdownView rows={selectedActivity.quantityBreakdown} />
+            </div>
+
+            <div className="rounded-md border bg-background p-3">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">
+                Unit-wise Total
+              </p>
+              <UnitWiseTotalView rows={selectedActivity.quantityBreakdown} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <Label>{t('week')} Number</Label>
+          <Select value={wpWeek} onValueChange={setWpWeek}>
+            <SelectTrigger className="mt-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(w => (
+                <SelectItem key={w} value={String(w)}>
+                  {t('week')} {w}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="rounded-md border bg-muted/20 p-3">
+          <p className="text-xs font-semibold text-muted-foreground mb-1">
+            Selected Week Quantity
+          </p>
+          <UnitWiseTotalView rows={wpBreakdown} />
+        </div>
+      </div>
+
+      <div className="rounded-lg border p-3 space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <Label>Floor / Unit / Quantity for this Week</Label>
+          <span className="text-xs text-muted-foreground">
+            Select from activity floor/unit rows
+          </span>
+        </div>
+
+        <QuantityBreakdownEditor
+          value={wpBreakdown}
+          onChange={setWpBreakdown}
+          allowedRows={selectedActivity?.quantityBreakdown || []}
+        />
+
+        <div className="rounded-md bg-muted/20 p-2 text-xs">
+          <span className="font-semibold">Week Total: </span>
+          <UnitWiseTotalView rows={wpBreakdown} />
+        </div>
+      </div>
+
+      <div>
+        <Label>Constraint</Label>
+        <Select value={wpConstraint} onValueChange={setWpConstraint}>
+          <SelectTrigger className="mt-1">
+            <SelectValue placeholder="Select constraint" />
+          </SelectTrigger>
+          <SelectContent>
+            {CONSTRAINTS.map(c => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <Label>{t('constraintDate')}</Label>
+          <Input
+            type="date"
+            value={wpConstraintDate}
+            onChange={e => setWpConstraintDate(e.target.value)}
+            className="mt-1"
+          />
+        </div>
+
+        <div>
+          <Label>{t('responsiblePerson')}</Label>
+          <Input
+            value={wpResponsiblePerson}
+            onChange={e => setWpResponsiblePerson(e.target.value)}
+            placeholder="Enter name"
+            className="mt-1"
+          />
+        </div>
+      </div>
+
+      <Button
+        onClick={() => showCreateWeekly && handleCreateWeekly(showCreateWeekly)}
+        disabled={!wpActivityId || wpBreakdown.length === 0 || totalQty(wpBreakdown) <= 0}
+        className="w-full"
+      >
+        <Send className="w-4 h-4" /> Add & Assign to Engineer
+      </Button>
+    </div>
+  </DialogContent>
+</Dialog>
 
       {/* {project.sixWeekPlans.flatMap(swp =>
                 swp.weeklyPlans.filter(wp => wp.assignedToEngineer).map(wp => ({ ...wp, swpId: swp.id, planName: swp.name }))
@@ -2809,121 +2962,168 @@ setWpFloor(act.floorUnits || getFloorsFromBreakdown(act.quantityBreakdown || [])
 
       {/* Create Daily Plan (Engineer) — 6 days only */}
       <Dialog open={!!showCreateDaily} onOpenChange={() => setShowCreateDaily(null)}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
-          <DialogHeader><DialogTitle>Add {t('dailyPlan')} (Mon-Sat)</DialogTitle></DialogHeader>
-            <div className="overflow-y-auto pr-2 space-y-4">
-          {selectedWp && (
-            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground">
-                {t('engineerTaskView')}
-              </p>
+  <DialogContent className="sm:max-w-5xl max-h-[90vh] flex flex-col">
+    <DialogHeader>
+      <DialogTitle>Add {t('dailyPlan')} (Mon-Sat)</DialogTitle>
+    </DialogHeader>
 
-              {selectedWp && (
-                <div className="border rounded p-2 bg-background">
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+    <div className="overflow-y-auto pr-2 space-y-4">
+      {selectedWp && (
+        <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground">
+            Assigned Weekly Plan
+          </p>
 
-                    <span className="text-muted-foreground">Plan Name:</span>
-                    <span>{selectedWp.planName}</span>
-
-                    <span className="text-muted-foreground">SWP ID:</span>
-                    <span>{selectedWp.swpId}</span>
-
-                    <span className="text-muted-foreground">Activity ID:</span>
-                    <span>{selectedWp.id}</span>
-
-                    <span className="text-muted-foreground">{t('week')}:</span>
-                    <span>{t('week')} {selectedWp.weekNumber}</span>
-
-                    <span className="text-muted-foreground">Estimated Quantity:</span>
-                    <span>{selectedWp.estimatedQuantity}</span>
-                    <span className="text-muted-foreground">Remaining Quantity:</span>
-                    <span>{selectedWp.remainingQuantity}</span>
-
-              <span className="text-muted-foreground">Units:</span>
-<span>
-  {(selectedWp.units && selectedWp.units.length ? selectedWp.units.join(", ") : selectedWp.unit) || "—"}
-</span>
-
-                    <span className="text-muted-foreground">Floor Units:</span>
-                    <span>
-                      {Array.isArray(selectedWp.floorUnits)
-                        ? selectedWp.floorUnits.join(", ")
-                        : selectedWp.floorUnits || "—"}
-                    </span>
-
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>{t('day')}</Label>
-                <Select value={dpDay} onValueChange={setDpDay}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>{DAY_NAMES.map((d, i) => <SelectItem key={i} value={String(i + 1)}>{d}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>{t('date')}</Label>
-                <Input type="date" value={dpDate} onChange={e => setDpDate(e.target.value)} className="mt-1" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-           <div>
-  <Label>Daily Floor / Unit / Quantity</Label>
-  <QuantityBreakdownEditor
-    value={dpBreakdown}
-    onChange={setDpBreakdown}
-    allowedRows={selectedWp?.quantityBreakdown || []}
-  />
-
-  <p className="text-xs text-muted-foreground mt-1">
-    Total daily quantity: {totalQty(dpBreakdown)} / Remaining: {maxAllowedQty}
-  </p>
-</div>
-              <div>
-                <Label>{t('constraint')}</Label>
-                <Select value={dpConstraint} onValueChange={setDpConstraint}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select constraint" /></SelectTrigger>
-                  <SelectContent>{CONSTRAINTS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-  <div>
-    <Label>{t('constraint')} {t('date')}</Label>
-    <Input
-      type="date"
-      value={dpConstraintDate}
-      onChange={e => setDpConstraintDate(e.target.value)}
-      className="mt-1"
-    />
-  </div>
-
-  <div>
-    <Label>{t('responsiblePerson')}</Label>
-    <Input
-      value={dpResponsiblePerson}
-      onChange={e => setDpResponsiblePerson(e.target.value)}
-      placeholder="Enter name"
-      className="mt-1"
-    />
-  </div>
-</div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+            <div>
+              <span className="text-muted-foreground block">Plan Name</span>
+              <span className="font-medium">{selectedWp.planName}</span>
             </div>
 
             <div>
-              <Label>Engineer Note (optional)</Label>
-              <Input value={dpNote} onChange={e => setDpNote(e.target.value)} placeholder="Any remarks for this day" className="mt-1" />
+              <span className="text-muted-foreground block">Week</span>
+              <span className="font-medium">{t('week')} {selectedWp.weekNumber}</span>
             </div>
-            <Button onClick={handleCreateDaily} disabled={!dpDate || dpBreakdown.length === 0 || totalQty(dpBreakdown) <= 0} className="w-full">
-              <Plus className="w-4 h-4" /> Add {t('dailyPlan')}
-            </Button>
+
+            <div>
+              <span className="text-muted-foreground block">Estimated</span>
+              <UnitWiseTotalView rows={selectedWp.quantityBreakdown} />
+            </div>
+
+            <div>
+              <span className="text-muted-foreground block">Remaining</span>
+              <UnitWiseTotalView rows={selectedWp.quantityBreakdown} />
+            </div>
           </div>
+
+          <div className="rounded-md border bg-background p-3">
+            <p className="text-xs font-semibold text-muted-foreground mb-2">
+              Weekly Floor / Qty / Unit
+            </p>
+            <QtyBreakdownView rows={selectedWp.quantityBreakdown} />
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <Label>{t('day')}</Label>
+          <Select value={dpDay} onValueChange={setDpDay}>
+            <SelectTrigger className="mt-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DAY_NAMES.map((d, i) => (
+                <SelectItem key={i} value={String(i + 1)}>
+                  {d}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label>{t('date')}</Label>
+          <Input
+            type="date"
+            value={dpDate}
+            onChange={e => setDpDate(e.target.value)}
+            className="mt-1"
+          />
+        </div>
+      </div>
+
+      <div className="rounded-lg border p-3 space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <Label>Daily Floor / Unit / Quantity</Label>
+
+          <div className="text-xs text-muted-foreground text-right">
+            <div>Selected:</div>
+            <UnitWiseTotalView rows={dpBreakdown} />
+          </div>
+        </div>
+
+        <QuantityBreakdownEditor
+          value={dpBreakdown}
+          onChange={setDpBreakdown}
+          allowedRows={selectedWp?.quantityBreakdown || []}
+        />
+
+        <div className="rounded-md bg-muted/20 p-2 text-xs">
+          <span className="font-semibold">Daily Total: </span>
+          <UnitWiseTotalView rows={dpBreakdown} />
+        </div>
+
+        {totalQty(dpBreakdown) > maxAllowedQty && (
+          <p className="text-xs text-destructive">
+            Daily quantity cannot exceed remaining quantity.
+          </p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div>
+          <Label>{t('constraint')}</Label>
+          <Select value={dpConstraint} onValueChange={setDpConstraint}>
+            <SelectTrigger className="mt-1">
+              <SelectValue placeholder="Select constraint" />
+            </SelectTrigger>
+            <SelectContent>
+              {CONSTRAINTS.map(c => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label>{t('constraint')} {t('date')}</Label>
+          <Input
+            type="date"
+            value={dpConstraintDate}
+            onChange={e => setDpConstraintDate(e.target.value)}
+            className="mt-1"
+          />
+        </div>
+
+        <div>
+          <Label>{t('responsiblePerson')}</Label>
+          <Input
+            value={dpResponsiblePerson}
+            onChange={e => setDpResponsiblePerson(e.target.value)}
+            placeholder="Enter name"
+            className="mt-1"
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label>Engineer Note (optional)</Label>
+        <Input
+          value={dpNote}
+          onChange={e => setDpNote(e.target.value)}
+          placeholder="Any remarks for this day"
+          className="mt-1"
+        />
+      </div>
+
+      <Button
+        onClick={handleCreateDaily}
+        disabled={
+          !dpDate ||
+          dpBreakdown.length === 0 ||
+          totalQty(dpBreakdown) <= 0 ||
+          totalQty(dpBreakdown) > maxAllowedQty
+        }
+        className="w-full"
+      >
+        <Plus className="w-4 h-4" /> Add {t('dailyPlan')}
+      </Button>
+    </div>
+  </DialogContent>
+</Dialog>
     </div>
   );
 };
