@@ -87,7 +87,8 @@ const toWeeklyPlan = (row: any, dailyPlans: DailyPlan[]): WeeklyPlan => {
     category: row.category,
     contractorId: row.contractor_id || '',
     tradeActivity: row.trade_activity,
-
+weekStartDate: row.week_start_date || undefined,
+weekEndDate: row.week_end_date || undefined,
     quantityBreakdown,
 
     units: row.units || getUnitsFromBreakdown(quantityBreakdown) || (row.unit ? [row.unit] : []),
@@ -313,7 +314,8 @@ const upsertWeeklyPlan = useCallback(async (wp: WeeklyPlan) => {
     category: wp.category,
     contractor_id: toUuidOrNull(wp.contractorId),
     trade_activity: wp.tradeActivity,
-
+    week_start_date: wp.weekStartDate ?? null,
+    week_end_date: wp.weekEndDate ?? null,
     quantity_breakdown: rows,
 
     units: rows.length ? units : wp.units ?? [],

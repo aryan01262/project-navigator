@@ -178,7 +178,8 @@ export interface WeeklyPlan {
   category: string;
   contractorId: string;
   tradeActivity: string;
-
+weekStartDate?: string;
+npm run devicePixelRatioweekEndDate?: string;
   quantityBreakdown: QuantityBreakdown[];
 
   units: string[];

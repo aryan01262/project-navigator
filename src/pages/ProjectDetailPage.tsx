@@ -340,6 +340,18 @@ const ActualBreakdownView = ({ rows }: { rows?: QuantityBreakdown[] }) => {
   );
 };
 
+const getSubWeekDateRange = (planStartDate: string, weekNumber: number) => {
+  const start = addDays(new Date(planStartDate), (weekNumber - 1) * 7);
+  const end = addDays(start, 5); // 6 working days: Mon-Sat
+
+  return {
+    weekStartDate: format(start, 'yyyy-MM-dd'),
+    weekEndDate: format(end, 'yyyy-MM-dd'),
+    displayStartDate: format(start, 'dd-MM-yyyy'),
+    displayEndDate: format(end, 'dd-MM-yyyy'),
+  };
+};
+
 const ProjectDetailPage = () => {
   const { t, i18n } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
@@ -739,7 +751,8 @@ const handleCreateWeekly = (sixWeekPlanId: string) => {
 
   const activity = swp.activities.find(a => a.id === wpActivityId);
   if (!activity) return;
-
+const weekNumber = Number(wpWeek);
+const weekRange = getSubWeekDateRange(swp.startDate, weekNumber);
 const weeklyRows = wpBreakdown;
 const qtyToAssign = totalQty(weeklyRows);
 
@@ -762,7 +775,9 @@ if (qtyToAssign > currentRemaining) {
 const wp: WeeklyPlan = {
   id: crypto.randomUUID(),
   sixWeekPlanId,
-  weekNumber: Number(wpWeek),
+  weekNumber: weekNumber,
+weekStartDate: weekRange.weekStartDate,
+weekEndDate: weekRange.weekEndDate,
   taskId: wpActivityId,
   category: activity.category,
   contractorId: activity.contractorId,
@@ -1206,6 +1221,11 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                               <span className="font-mono text-xs text-muted-foreground">{wp.taskId}</span>
                           <span className="text-sm font-medium flex items-center gap-2">
   {getWeekCycleLabel(wp, swp)} · {wp.tradeActivity}
+  <span className="text-xs text-muted-foreground">
+  {wp.weekStartDate && wp.weekEndDate
+    ? `${format(new Date(wp.weekStartDate), 'dd-MM-yyyy')} → ${format(new Date(wp.weekEndDate), 'dd-MM-yyyy')}`
+    : ''}
+</span>
 </span>
                              {(() => {
   const {
@@ -2424,7 +2444,7 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
                       onChange={(e) => updateActivity(editingActivityIdx, "tradeActivity", e.target.value)}
                     />
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid gap-3">
                     <div>
   <Label className="text-xs">Floor / Unit / Quantity Breakdown</Label>
   <QuantityBreakdownEditor
@@ -2877,6 +2897,16 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
             </SelectContent>
           </Select>
         </div>
+
+        {currentSwpForWeekly && wpWeek && (
+  <div className="rounded-md border bg-muted/20 p-3 text-xs">
+    <span className="font-semibold">Selected Week Date Range: </span>
+    {(() => {
+      const range = getSubWeekDateRange(currentSwpForWeekly.startDate, Number(wpWeek));
+      return `${range.displayStartDate} → ${range.displayEndDate}`;
+    })()}
+  </div>
+)}
 
         <div className="rounded-md border bg-muted/20 p-3">
           <p className="text-xs font-semibold text-muted-foreground mb-1">
