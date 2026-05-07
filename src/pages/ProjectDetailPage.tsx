@@ -454,12 +454,29 @@ const openSupervisorLogDialog = (
   dp: DailyPlan,
   mode: 'create' | 'edit' = 'create'
 ) => {
-  setShowSupervisorLogDialog({ sixWeekPlanId, weeklyPlanId, dailyPlanId: dp.id });
+  setShowSupervisorLogDialog({
+    sixWeekPlanId,
+    weeklyPlanId,
+    dailyPlanId: dp.id,
+  });
+
   setSupervisorDialogMode(mode);
-  setSupervisorBreakdown((dp.quantityBreakdown || []).map(r => ({
-    ...r,
-    completedQuantity: r.completedQuantity ?? 0,
-  })));
+
+  setSupervisorBreakdown(
+    (dp.quantityBreakdown || []).map(row => ({
+      ...row,
+      quantity: Number(row.quantity || 0),
+      completedQuantity:
+        mode === 'edit'
+          ? Number(row.completedQuantity || 0)
+          : 0,
+      remainingQuantity:
+        mode === 'edit'
+          ? Math.max(0, Number(row.quantity || 0) - Number(row.completedQuantity || 0))
+          : Number(row.quantity || 0),
+    }))
+  );
+
   setSupervisorLogQty(dp.completedQuantity ? String(dp.completedQuantity) : '');
   setSupervisorRovComment(dp.rov || 'none');
 };
@@ -467,9 +484,20 @@ const handleSupervisorLogSubmit = () => {
   if (!showSupervisorLogDialog || !project) return;
 
   const { sixWeekPlanId, weeklyPlanId, dailyPlanId } = showSupervisorLogDialog;
-  const qty = supervisorBreakdown.length
-  ? totalCompletedQty(supervisorBreakdown)
-  : Number(supervisorLogQty || 0);
+
+  const cleanedBreakdown = supervisorBreakdown.map(row => ({
+    ...row,
+    quantity: Number(row.quantity || 0),
+    completedQuantity: Number(row.completedQuantity || 0),
+    remainingQuantity: Math.max(
+      0,
+      Number(row.quantity || 0) - Number(row.completedQuantity || 0)
+    ),
+  }));
+
+  const qty = cleanedBreakdown.length
+    ? totalCompletedQty(cleanedBreakdown)
+    : Number(supervisorLogQty || 0);
 
   if (qty <= 0) {
     alert('Done quantity must be greater than 0');
@@ -483,7 +511,8 @@ const handleSupervisorLogSubmit = () => {
       weeklyPlanId,
       dailyPlanId,
       qty,
-      supervisorRovComment
+      supervisorRovComment,
+      cleanedBreakdown
     );
   } else {
     logDailyTarget(
@@ -493,7 +522,8 @@ const handleSupervisorLogSubmit = () => {
       dailyPlanId,
       qty,
       true,
-      supervisorRovComment
+      supervisorRovComment,
+      cleanedBreakdown
     );
   }
 
@@ -501,6 +531,7 @@ const handleSupervisorLogSubmit = () => {
   setSupervisorDialogMode('create');
   setSupervisorLogQty('');
   setSupervisorRovComment('');
+  setSupervisorBreakdown([]);
 };
 const openEditWeeklyDialog = (swpId: string, wp: WeeklyPlan) => {
   setShowEditWeekly({ swpId, wpId: wp.id });
@@ -2537,7 +2568,7 @@ const hasOpenBacklogForWeek = (weeklyPlanId: string) =>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid  gap-3">
            <div>
   <Label>Actual Quantity by Floor / Unit</Label>
   <QuantityBreakdownEditor

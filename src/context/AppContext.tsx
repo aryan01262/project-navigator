@@ -8,7 +8,8 @@ import type {
   Contractor,
   PlanActivity,
   Ticket,
-  BacklogItem
+  BacklogItem,
+  QuantityBreakdown
 } from '@/types/planner';
 import { DEFAULT_CONTRACTORS } from '@/types/planner';
 import { useAuth } from '@/hooks/useAuth';
@@ -30,7 +31,7 @@ interface AppContextType {
   assignToEngineer: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string) => void;
   addDailyPlan: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, daily: DailyPlan) => void;
   forwardDailyToSupervisor: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string) => void;
-  logDailyTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string, completedQty: number, isDone: boolean, rov: string) => void;
+  logDailyTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string, completedQty: number, isDone: boolean, rov: string, quantityBreakdown?: QuantityBreakdown[]) => void;
   submitDailyTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string, constraintLog: string) => void;
   confirmDailyTarget: (projectId: string, sixWeekPlanId: string, weeklyPlanId: string, dailyPlanId: string) => void;
   updateActivity2: (projectId: string, sixWeekPlanId: string, activityId: string, patch: Partial<PlanActivity>) => void;
@@ -65,14 +66,15 @@ interface AppContextType {
     weeklyPlanId: string
   ) => void;
 
-  updateSupervisorLog: (
-    projectId: string,
-    sixWeekPlanId: string,
-    weeklyPlanId: string,
-    dailyPlanId: string,
-    completedQuantity: number,
-    rov: string
-  ) => void;
+updateSupervisorLog: (
+  projectId: string,
+  sixWeekPlanId: string,
+  weeklyPlanId: string,
+  dailyPlanId: string,
+  completedQuantity: number,
+  rov: string,
+  quantityBreakdown?: QuantityBreakdown[]
+) => void;
 
   deleteSupervisorLog: (
     projectId: string,
@@ -703,90 +705,99 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncTicket(ticket);
   };
 
-  const logDailyTarget = useCallback((
-    pid: string,
-    swpId: string,
-    wpId: string,
-    dpId: string,
-    completedQuantity: number,
-    isDone: boolean,
-    rov: string
-  ) => {
-    let targetDP: DailyPlan | null = null;
-    let targetProject: Project | null = null;
-    let targetWP: WeeklyPlan | null = null;
+const logDailyTarget = useCallback((
+  pid: string,
+  swpId: string,
+  wpId: string,
+  dpId: string,
+  completedQuantity: number,
+  isDone: boolean,
+  rov: string,
+  quantityBreakdown?: QuantityBreakdown[]
+) => {
+  let targetDP: DailyPlan | null = null;
+  let targetProject: Project | null = null;
+  let targetWP: WeeklyPlan | null = null;
 
-    projects.forEach(p => {
-      if (p.id === pid) {
-        targetProject = p;
-        p.sixWeekPlans.forEach(swp => {
-          if (swp.id === swpId) {
-            swp.weeklyPlans.forEach(wp => {
-              if (wp.id === wpId) {
-                targetWP = wp;
-                wp.dailyPlans.forEach(dp => {
-                  if (dp.id === dpId) targetDP = dp;
-                });
-              }
-            });
-          }
-        });
-      }
-    });
-
-    let updatedForTicket: DailyPlan | null = null;
-
-    updateDailyPlan(pid, swpId, wpId, dpId, dp => {
-      const rows = dp.quantityBreakdown || [];
-
-      const updatedRows = rows.length
-        ? rows.map(row => ({
-            ...row,
-            completedQuantity:
-              row.completedQuantity !== undefined
-                ? row.completedQuantity
-                : Number(row.quantity || 0),
-          }))
-        : rows;
-
-      updatedForTicket = {
-        ...dp,
-        quantityBreakdown: updatedRows,
-        status: 'logged',
-        completedQuantity: rows.length ? totalCompletedQty(updatedRows) : completedQuantity,
-        remainingQuantity: rows.length
-          ? totalRemainingQty(updatedRows)
-          : Math.max(0, Number(dp.plannedQuantity || 0) - completedQuantity),
-        isDone,
-        rov: rov === 'none' ? '' : rov,
-      };
-
-      return updatedForTicket;
-    });
-
-    const dpForTicket = updatedForTicket || targetDP;
-
-    if (
-      dpForTicket &&
-      targetProject &&
-      targetWP &&
-      (
-        dpForTicket.quantityBreakdown?.length
-          ? totalRemainingQty(dpForTicket.quantityBreakdown) > 0
-          : completedQuantity < Number(dpForTicket.plannedQuantity || 0)
-      )
-    ) {
-      createTicketFromShortfall(
-        targetProject,
-        swpId,
-        wpId,
-        dpForTicket,
-        completedQuantity,
-        rov === 'none' ? '' : rov,
-        targetWP
-      );
+  projects.forEach(p => {
+    if (p.id === pid) {
+      targetProject = p;
+      p.sixWeekPlans.forEach(swp => {
+        if (swp.id === swpId) {
+          swp.weeklyPlans.forEach(wp => {
+            if (wp.id === wpId) {
+              targetWP = wp;
+              wp.dailyPlans.forEach(dp => {
+                if (dp.id === dpId) targetDP = dp;
+              });
+            }
+          });
+        }
+      });
     }
-  }, [projects, updateDailyPlan]);
+  });
+
+  let updatedForTicket: DailyPlan | null = null;
+
+  updateDailyPlan(pid, swpId, wpId, dpId, dp => {
+    const incomingRows = quantityBreakdown || [];
+    const existingRows = dp.quantityBreakdown || [];
+
+    const updatedRows = incomingRows.length
+      ? incomingRows.map(row => ({
+          ...row,
+          quantity: Number(row.quantity || 0),
+          completedQuantity: Number(row.completedQuantity || 0),
+          remainingQuantity: Math.max(
+            0,
+            Number(row.quantity || 0) - Number(row.completedQuantity || 0)
+          ),
+        }))
+      : existingRows;
+
+    updatedForTicket = {
+      ...dp,
+      quantityBreakdown: updatedRows,
+      status: 'logged',
+      completedQuantity: incomingRows.length
+        ? totalCompletedQty(updatedRows)
+        : completedQuantity,
+      remainingQuantity: incomingRows.length
+        ? totalRemainingQty(updatedRows)
+        : Math.max(0, Number(dp.plannedQuantity || 0) - completedQuantity),
+      isDone,
+      rov: rov === 'none' ? '' : rov,
+      floorUnits: incomingRows.length ? getFloorsFromBreakdown(updatedRows) : dp.floorUnits,
+      units: incomingRows.length ? getUnitsFromBreakdown(updatedRows) : dp.units,
+      unit: incomingRows.length ? getUnitsFromBreakdown(updatedRows)[0] : dp.unit,
+    };
+
+    return updatedForTicket;
+  });
+
+  const dpForTicket = updatedForTicket || targetDP;
+
+  if (
+    dpForTicket &&
+    targetProject &&
+    targetWP &&
+    (
+      dpForTicket.quantityBreakdown?.length
+        ? totalRemainingQty(dpForTicket.quantityBreakdown) > 0
+        : completedQuantity < Number(dpForTicket.plannedQuantity || 0)
+    )
+  ) {
+    createTicketFromShortfall(
+      targetProject,
+      swpId,
+      wpId,
+      dpForTicket,
+      completedQuantity,
+      rov === 'none' ? '' : rov,
+      targetWP
+    );
+  }
+}, [projects, updateDailyPlan]);
 
   const submitDailyTarget = useCallback((pid: string, swpId: string, wpId: string, dpId: string, constraintLog: string) => {
     updateDailyPlan(pid, swpId, wpId, dpId, dp => ({
@@ -816,40 +827,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   }, [syncTicket]);
 
-  const updateSupervisorLog = useCallback((
-    pid: string,
-    swpId: string,
-    wpId: string,
-    dpId: string,
-    completedQuantity: number,
-    rov: string
-  ) => {
-    updateDailyPlan(pid, swpId, wpId, dpId, dp => {
-      if (dp.status !== 'logged') return dp;
+const updateSupervisorLog = useCallback((
+  pid: string,
+  swpId: string,
+  wpId: string,
+  dpId: string,
+  completedQuantity: number,
+  rov: string,
+  quantityBreakdown?: QuantityBreakdown[]
+) => {
+  updateDailyPlan(pid, swpId, wpId, dpId, dp => {
+    if (dp.status !== 'logged') return dp;
 
-      const rows = dp.quantityBreakdown || [];
-      const updatedRows = rows.length
-        ? rows.map(row => ({
-            ...row,
-            completedQuantity:
-              row.completedQuantity !== undefined
-                ? row.completedQuantity
-                : Number(row.quantity || 0),
-          }))
-        : rows;
+    const incomingRows = quantityBreakdown || [];
+    const existingRows = dp.quantityBreakdown || [];
 
-      return {
-        ...dp,
-        quantityBreakdown: updatedRows,
-        completedQuantity: rows.length ? totalCompletedQty(updatedRows) : completedQuantity,
-        remainingQuantity: rows.length
-          ? totalRemainingQty(updatedRows)
-          : Math.max(0, Number(dp.plannedQuantity || 0) - completedQuantity),
-        rov: rov === 'none' ? '' : rov,
-        status: 'logged',
-      };
-    });
-  }, [updateDailyPlan]);
+    const updatedRows = incomingRows.length
+      ? incomingRows.map(row => ({
+          ...row,
+          quantity: Number(row.quantity || 0),
+          completedQuantity: Number(row.completedQuantity || 0),
+          remainingQuantity: Math.max(
+            0,
+            Number(row.quantity || 0) - Number(row.completedQuantity || 0)
+          ),
+        }))
+      : existingRows;
+
+    return {
+      ...dp,
+      quantityBreakdown: updatedRows,
+      completedQuantity: incomingRows.length
+        ? totalCompletedQty(updatedRows)
+        : completedQuantity,
+      remainingQuantity: incomingRows.length
+        ? totalRemainingQty(updatedRows)
+        : Math.max(0, Number(dp.plannedQuantity || 0) - completedQuantity),
+      rov: rov === 'none' ? '' : rov,
+      status: 'logged',
+      floorUnits: incomingRows.length ? getFloorsFromBreakdown(updatedRows) : dp.floorUnits,
+      units: incomingRows.length ? getUnitsFromBreakdown(updatedRows) : dp.units,
+      unit: incomingRows.length ? getUnitsFromBreakdown(updatedRows)[0] : dp.unit,
+    };
+  });
+}, [updateDailyPlan]);
 
   const deleteSupervisorLog = useCallback((
     pid: string,
