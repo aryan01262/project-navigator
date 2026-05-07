@@ -476,7 +476,6 @@ const openSupervisorLogDialog = (
           : Number(row.quantity || 0),
     }))
   );
-
   setSupervisorLogQty(dp.completedQuantity ? String(dp.completedQuantity) : '');
   setSupervisorRovComment(dp.rov || 'none');
 };
